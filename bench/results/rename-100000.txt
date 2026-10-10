@@ -1,0 +1,15 @@
+machine: Intel(R) Xeon(R) Processor @ 2.10GHz, 4 schedulers online, 15.7 GiB of memory, Linux 6.18
+beam: Elixir 1.20.4 on Erlang/OTP 29
+typedb: TypeDB CE 3.12.1, on the same machine
+date: 2026-10-03
+
+insert 100000 memories: 31.5 s
+link 10000 subjects and 9999 derivations: 10.0 s
+backup: 105.0 s
+backup: 110000 entities, 19999 relations
+rewrite labels: 3.5 s
+restore: 216.2 s
+restore: 129999 instances
+rem_memory: 100000
+rem_concerning: 10000
+rem_derivation: 9999

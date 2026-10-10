@@ -1,0 +1,91 @@
+reminisce
+Copyright 2026 NoeticEcho and the reminisce contributors
+
+This product includes software developed by NoeticEcho (https://github.com/NoeticEcho).
+
+-------------------------------------------------------------------------------
+Third-party material
+
+1. Stop words, in lib/reminisce/analyser/default.ex
+
+   The Russian stop words (@ru_stop) are the Snowball project's Russian stop
+   word list as the NLTK stopwords corpus distributes it (151 words, in its
+   order), with one word added. The English stop words (@en_stop) are 101
+   words of the Snowball project's English stop word list, with six added
+   ("also", "can", "just", "may", "us", "will"). Of the default analyser's 61
+   Russian endings, 55 are among the suffixes of the Snowball Russian
+   stemmer; the stemming procedure itself is not Snowball's.
+
+   Source: https://snowballstem.org/ (algorithms/russian/stop.txt,
+   algorithms/english/stop.txt, algorithms/russian.sbl). Licence:
+   BSD-3-Clause.
+
+     Copyright (c) 2001, Dr Martin Porter
+     Copyright (c) 2004,2005, Richard Boulton
+     Copyright (c) 2013, Yoshiki Shibukawa
+     Copyright (c) 2006-2025, Olly Betts
+     All rights reserved.
+
+     Redistribution and use in source and binary forms, with or without
+     modification, are permitted provided that the following conditions
+     are met:
+
+       1. Redistributions of source code must retain the above copyright
+          notice, this list of conditions and the following disclaimer.
+
+       2. Redistributions in binary form must reproduce the above copyright
+          notice, this list of conditions and the following disclaimer in
+          the documentation and/or other materials provided with the
+          distribution.
+
+       3. Neither the name of the Snowball project nor the names of its
+          contributors may be used to endorse or promote products derived
+          from this software without specific prior written permission.
+
+     THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+     "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+     LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+     A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+     OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+     SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+     LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+     DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+     THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+     (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+     OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+2. Secret-detection rules, in lib/reminisce/secret_guard.ex
+
+   The patterns of these rules are derived from the default configuration of
+   gitleaks 8.28.0 (config/gitleaks.toml): private_key (its header),
+   aws_access_key, gcp_api_key, azure_ad_client_secret, github_token,
+   github_fine_grained_pat, gitlab_token, slack_token, slack_webhook,
+   stripe_key, square_token, jwt, npm_token, pypi_token, anthropic_key,
+   openai_key, digitalocean_token, shopify_token, hashicorp_vault_token,
+   sendgrid_key (sendgrid-api-token) and twilio_key; the key words of
+   generic_assignment follow gitleaks' generic-api-key. They were shortened, bounded and in places merged or
+   widened here. gcp_service_account and url_credentials are not gitleaks'
+   rules.
+
+   Source: https://github.com/gitleaks/gitleaks. Licence: MIT.
+
+     Copyright (c) 2019 Zachary Rice
+
+     Permission is hereby granted, free of charge, to any person obtaining a
+     copy of this software and associated documentation files (the
+     "Software"), to deal in the Software without restriction, including
+     without limitation the rights to use, copy, modify, merge, publish,
+     distribute, sublicense, and/or sell copies of the Software, and to
+     permit persons to whom the Software is furnished to do so, subject to
+     the following conditions:
+
+     The above copyright notice and this permission notice shall be included
+     in all copies or substantial portions of the Software.
+
+     THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+     OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+     MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+     IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+     CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+     TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+     SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.

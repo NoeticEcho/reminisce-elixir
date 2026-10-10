@@ -1,0 +1,13 @@
+machine: Intel(R) Xeon(R) Processor @ 2.10GHz, 4 schedulers online, 15.7 GiB of memory, Linux 6.18
+beam: Elixir 1.20.4 on Erlang/OTP 29
+typedb: TypeDB CE 3.12.1, on the same machine
+date: 2026-10-03
+
+withdraw 10000 memories, batch 500: 10.3 s
+  10000 memories redacted in 20 batches
+withdraw 10000 memories, batch 4000: 25.2 s
+  10000 memories redacted in 3 batches
+withdraw 50000 memories, batch 500: 424.6 s
+  50000 memories redacted in 100 batches
+withdraw 50000 memories, batch 4000: 990.8 s
+  50000 memories redacted in 13 batches

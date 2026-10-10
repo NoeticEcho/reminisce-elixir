@@ -1,0 +1,82 @@
+[
+  {
+    "query": "why did android users get logged out after the update",
+    "expected": "B-01"
+  },
+  {
+    "query": "push notifications arriving hours late",
+    "expected": "B-02"
+  },
+  {
+    "query": "ticket QR code would not scan at the gate",
+    "expected": "B-03"
+  },
+  {
+    "query": "refunds charged twice to the same card",
+    "expected": "B-04"
+  },
+  {
+    "query": "app crashes when the phone is offline",
+    "expected": "B-05"
+  },
+  {
+    "query": "which payment provider do we use",
+    "expected": "B-06"
+  },
+  {
+    "query": "map tiles blank on older iphones",
+    "expected": "B-07"
+  },
+  {
+    "query": "seat picker slow for large venues",
+    "expected": "B-08"
+  },
+  {
+    "query": "translations missing in the polish build",
+    "expected": "B-09"
+  },
+  {
+    "query": "battery drain complaints from background location",
+    "expected": "B-10"
+  },
+  {
+    "query": "accessibility: screen reader skips the buy button",
+    "expected": "B-11"
+  },
+  {
+    "query": "release builds fail signing on the CI machine",
+    "expected": "B-12"
+  },
+  {
+    "query": "how long do we keep order history",
+    "expected": "B-13"
+  },
+  {
+    "query": "timezone wrong on event start times abroad",
+    "expected": "B-14"
+  },
+  {
+    "query": "app store review rejected the subscription screen",
+    "expected": "B-15"
+  },
+  {
+    "query": "users cannot reset their password from the email link",
+    "expected": "B-16"
+  },
+  {
+    "query": "dark theme makes the ticket barcode unreadable",
+    "expected": "B-17"
+  },
+  {
+    "query": "feature flags flipped for everyone by mistake",
+    "expected": "B-18"
+  },
+  {
+    "query": "search results empty for venue names with accents",
+    "expected": "B-19"
+  },
+  {
+    "query": "analytics events double counted after retry",
+    "expected": "B-20"
+  }
+]

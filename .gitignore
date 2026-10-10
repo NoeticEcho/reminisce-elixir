@@ -1,0 +1,8 @@
+_build/
+deps/
+doc/
+cover/
+*.ez
+erl_crash.dump
+.elixir_ls/
+reminisce-*.tar

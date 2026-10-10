@@ -1,0 +1,82 @@
+[
+  {
+    "query": "why is the pipeline so slow when the dependency cache misses",
+    "expected": "L-001"
+  },
+  {
+    "query": "snapshot tests fail randomly on some runners",
+    "expected": "L-002"
+  },
+  {
+    "query": "worker ran out of memory making thumbnails of a huge photo",
+    "expected": "L-003"
+  },
+  {
+    "query": "readers saw a half built search index during a deploy",
+    "expected": "L-004"
+  },
+  {
+    "query": "which day of the week do production deploys happen",
+    "expected": "D-002"
+  },
+  {
+    "query": "feed dates are off by one day for readers in Asia",
+    "expected": "L-005"
+  },
+  {
+    "query": "link checker says ok but the page redirects to a 404",
+    "expected": "L-006"
+  },
+  {
+    "query": "pdf export of a big table takes minutes",
+    "expected": "L-007"
+  },
+  {
+    "query": "changing a layout template does not rebuild the pages",
+    "expected": "L-008"
+  },
+  {
+    "query": "russian pages full of spelling errors",
+    "expected": "L-009"
+  },
+  {
+    "query": "draft pages showing up in the sitemap",
+    "expected": "L-010"
+  },
+  {
+    "query": "upload to storage hits the rate limit",
+    "expected": "L-011"
+  },
+  {
+    "query": "highlighter crashes on an unknown language in a code block",
+    "expected": "L-012"
+  },
+  {
+    "query": "last modified date is always today after checkout",
+    "expected": "L-019"
+  },
+  {
+    "query": "two builds of the same commit produce different output",
+    "expected": "L-023"
+  },
+  {
+    "query": "diagrams glare white in dark mode",
+    "expected": "L-024"
+  },
+  {
+    "query": "translations falling behind the english source",
+    "expected": "L-027"
+  },
+  {
+    "query": "should we put tracking scripts or analytics on the site",
+    "expected": "D-008"
+  },
+  {
+    "query": "client side search index is too big",
+    "expected": "L-037"
+  },
+  {
+    "query": "typo in config silently disabled the sitemap",
+    "expected": "L-039"
+  }
+]

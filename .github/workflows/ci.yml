@@ -1,0 +1,115 @@
+# SPDX-FileCopyrightText: 2026 NoeticEcho and the reminisce contributors
+# SPDX-License-Identifier: Apache-2.0
+
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    # Format, warnings-as-errors, and the full suite against a real TypeDB.
+    # REMINISCE_REQUIRE_TYPEDB=1 makes a missing server a failure, never a skip.
+    runs-on: ubuntu-24.04
+    services:
+      typedb:
+        image: typedb/typedb:3.12.1
+        ports:
+          - 1729:1729
+          - 8000:8000
+    env:
+      MIX_ENV: test
+      LANG: C.UTF-8
+      LC_ALL: C.UTF-8
+      TYPEDB_URL: http://127.0.0.1:8000
+      REMINISCE_REQUIRE_TYPEDB: "1"
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: erlef/setup-beam@54075bcc5e249e4758d363f27d099f55d843f124 # v1.24.1
+        with:
+          otp-version: "29"
+          elixir-version: "1.20"
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: |
+            deps
+            _build
+          key: mix-${{ runner.os }}-29-1.20-${{ hashFiles('mix.lock') }}
+      - run: mix deps.get
+      - run: mix format --check-formatted
+      - run: mix compile --warnings-as-errors
+      - name: Wait for TypeDB
+        run: |
+          for i in $(seq 1 60); do
+            curl --fail --silent http://127.0.0.1:8000/health && exit 0
+            sleep 2
+          done
+          echo "TypeDB did not answer /health" >&2
+          exit 1
+      - run: mix test
+
+  test-oldest:
+    # The same suite on the oldest Elixir and OTP the README names, 1.19 on
+    # OTP 28. Elixir 1.18 cannot compile the library on OTP 28 (it cannot
+    # escape a compiled regex into a module attribute), and on OTP 27 the
+    # VM's terminal reader takes the MCP server's first input before it can
+    # read fd 0. Format is checked by `test` only: the formatter's output may
+    # differ between versions.
+    runs-on: ubuntu-24.04
+    services:
+      typedb:
+        image: typedb/typedb:3.12.1
+        ports:
+          - 1729:1729
+          - 8000:8000
+    env:
+      MIX_ENV: test
+      LANG: C.UTF-8
+      LC_ALL: C.UTF-8
+      TYPEDB_URL: http://127.0.0.1:8000
+      REMINISCE_REQUIRE_TYPEDB: "1"
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: erlef/setup-beam@54075bcc5e249e4758d363f27d099f55d843f124 # v1.24.1
+        with:
+          otp-version: "28"
+          elixir-version: "1.19"
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: |
+            deps
+            _build
+          key: mix-${{ runner.os }}-28-1.19-${{ hashFiles('mix.lock') }}
+      - run: mix deps.get
+      - run: mix compile --warnings-as-errors
+      - name: Wait for TypeDB
+        run: |
+          for i in $(seq 1 60); do
+            curl --fail --silent http://127.0.0.1:8000/health && exit 0
+            sleep 2
+          done
+          echo "TypeDB did not answer /health" >&2
+          exit 1
+      - run: mix test
+
+  gitleaks:
+    # Criterion 9: gitleaks reports nothing on the full history.
+    runs-on: ubuntu-24.04
+    env:
+      GITLEAKS_VERSION: 8.28.0
+      GITLEAKS_SHA256: a65b5253807a68ac0cafa4414031fd740aeb55f54fb7e55f386acb52e6a840eb
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+      - name: Install gitleaks
+        run: |
+          curl -sSfL -o gitleaks.tgz "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          echo "${GITLEAKS_SHA256}  gitleaks.tgz" | sha256sum --check
+          tar -xzf gitleaks.tgz gitleaks
+      - run: ./gitleaks git --no-banner --redact --verbose --log-opts="--all" .
