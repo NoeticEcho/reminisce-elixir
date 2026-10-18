@@ -4,7 +4,7 @@
 defmodule Reminisce.MixProject do
   use Mix.Project
 
-  @version "0.2.0"
+  @version "0.2.1"
   @source_url "https://github.com/NoeticEcho/reminisce-elixir"
 
   def project do
@@ -46,9 +46,11 @@ defmodule Reminisce.MixProject do
       licenses: ["Apache-2.0"],
       links: %{
         "GitHub" => @source_url,
+        "Documentation" => "https://hexdocs.pm/reminisce",
         "Changelog" => "#{@source_url}/blob/v#{@version}/docs/CHANGELOG.md"
       },
-      files: ~w(lib mix.exs .formatter.exs README.md LICENSE NOTICE docs/CHANGELOG.md)
+      files:
+        ~w(lib mix.exs .formatter.exs README.md LICENSE NOTICE docs/CHANGELOG.md docs/spec.md)
     ]
   end
 

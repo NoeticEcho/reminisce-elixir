@@ -4,6 +4,18 @@ reminisce follows [Semantic Versioning](https://semver.org/). While it is
 `0.x`, a minor version may change the public API; every such change is listed
 here.
 
+## 0.2.1 (2026-10-18)
+
+A patch: text and release tooling only, no change to the API.
+
+- The package is on [Hex](https://hex.pm/packages/reminisce), with its
+  documentation on [HexDocs](https://hexdocs.pm/reminisce). The README gives
+  the Hex requirement first and the git form as the alternative.
+- The package links name the documentation, and the package files include
+  `docs/spec.md`, which the README links to.
+- The release tooling can make a later release as one commit on top of the
+  public repository's main; it is not part of the package.
+
 ## 0.2.0 (2026-10-10)
 
 The first public release.
