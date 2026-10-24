@@ -2,7 +2,7 @@
 
 Agent memory on TypeDB: an Elixir library with an MCP face.
 
-Status: **0.5.1.** Its releases are on [Hex](https://hex.pm/packages/reminisce).
+Status: **0.5.2.** Its releases are on [Hex](https://hex.pm/packages/reminisce).
 While it is `0.x`, a minor version may change the public API;
 [`docs/CHANGELOG.md`](docs/CHANGELOG.md) lists every such change. The design is [`docs/spec.md`](docs/spec.md), and its §9 is the
 readiness test this release passes in CI.
@@ -149,7 +149,7 @@ Add it to the `deps` in your `mix.exs`:
 Or, from its git repository at a release tag:
 
 ```elixir
-{:reminisce, git: "https://github.com/NoeticEcho/reminisce-elixir.git", tag: "v0.5.1"}
+{:reminisce, git: "https://github.com/NoeticEcho/reminisce-elixir.git", tag: "v0.5.2"}
 ```
 
 Then run `mix deps.get`. The library needs a TypeDB server to talk to;
@@ -624,7 +624,7 @@ TYPEDB_PASSWORD=… mix reminisce.mcp --owner agent:alice --database memory
 Logs go to stderr; stdout carries JSON-RPC and nothing else (a test starts
 the task as an OS process and parses every stdout line).
 
-The server also comes without Elixir: from 0.5.1, each GitHub release
+The server also comes without Elixir: from 0.5.2, each GitHub release
 carries it as `reminisce-mcp-VERSION-OS-ARCH.tar.gz`, for macOS 13 or newer
 and for Linux with glibc 2.28 or newer, on arm64 and x86_64, each with its
 SHA-256 beside it. Check the file against its checksum, unpack it, and run

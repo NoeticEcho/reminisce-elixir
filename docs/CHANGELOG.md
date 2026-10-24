@@ -4,9 +4,13 @@ reminisce follows [Semantic Versioning](https://semver.org/). While it is
 `0.x`, a minor version may change the public API; every such change is listed
 here.
 
+## 0.5.2 (2026-10-24)
+
+- Nothing in the library or the server changed: 0.5.2 is 0.5.1 with a release test that holds again. The release workflow failed on all four platforms, for 0.5.0 and for 0.5.1, on the test that what the server's VM prints itself reaches stderr and never the MCP stream: it passed its extra VM flag through `RELEASE_VM_ARGS`, which `bin/reminisce-mcp` clears, so the VM never saw the flag and printed nothing. It now starts a copy of the release whose `vm.args` adds `-init_debug`, which makes the VM print on stdout as it boots, and finds that on stderr and nothing but JSON-RPC on stdout. So neither 0.5.0 nor 0.5.1 has server downloads, and neither was published to Hex; 0.5.2 is the release.
+
 ## 0.5.1 (2026-10-24)
 
-- Compiles with no warnings on Elixir 1.19, the oldest the README names: a persona writer's answer is matched as a `Reminisce.Persona.Version` before it is updated. 0.5.0's public CI failed on that warning under `--warnings-as-errors`, so 0.5.0 was not published to Hex; 0.5.1 is the release.
+- Compiles with no warnings on Elixir 1.19, the oldest the README names: a persona writer's answer is matched as a `Reminisce.Persona.Version` before it is updated. 0.5.0's public CI failed on that warning under `--warnings-as-errors`, so 0.5.0 was not published to Hex.
 
 ## 0.5.0 (2026-10-24)
 

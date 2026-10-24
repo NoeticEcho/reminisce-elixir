@@ -59,27 +59,27 @@ defmodule Reminisce.MCP.ReleaseTest do
   end
 
   test "what the VM prints itself goes to stderr, never to the MCP stream" do
-    # A boot error from before the logger is set up, which the VM prints on
-    # descriptor 1 itself: bin/reminisce-mcp has pointed that at stderr.
-    root = Path.dirname(Path.dirname(Reminisce.MCPServer.command()))
-    [_erts, vsn] = root |> Path.join("releases/start_erl.data") |> File.read!() |> String.split()
-    vm_args = Path.join(System.tmp_dir!(), "t_rel_vm_args_" <> hex(5))
-    on_exit(fn -> File.rm(vm_args) end)
+    # init's account of the boot script it runs (-init_debug, erl(1)), which
+    # the VM prints on descriptor 1 itself, as it does a report from before
+    # the logger is set up: bin/reminisce-mcp has pointed that descriptor at
+    # stderr. The flag exists to print, so the test does not depend on a
+    # warning that one OTP release prints and the next may not. The launcher
+    # clears RELEASE_VM_ARGS, so the flag goes into the vm.args of a copy of
+    # the release.
+    root = release_copy!("\n-init_debug\n")
 
-    File.write!(
-      vm_args,
-      File.read!(Path.join([root, "releases", vsn, "vm.args"])) <>
-        "\n-kernel inetrc '\"/nonexistent/inetrc\"'\n"
-    )
+    # Started without the launcher, the copy prints it on stdout.
+    {out, 0} = System.cmd(Path.join(root, "bin/reminisce"), ["eval", ":ok"])
+    assert out =~ "{progress,started}"
 
-    {port, os_pid, dir} = start!([{"RELEASE_VM_ARGS", vm_args}])
+    {port, os_pid, dir} = start!([], Path.join(root, "bin/reminisce-mcp"))
     reply!(port)
     {_, 0} = System.cmd("kill", ["-TERM", Integer.to_string(os_pid)])
     {status, out} = exit!(port, os_pid)
 
     assert status == 0
     assert json_rpc_only?(out), "not JSON-RPC on stdout: #{inspect(out)}"
-    assert File.read!(Path.join(dir, "stderr")) =~ "/nonexistent/inetrc"
+    assert File.read!(Path.join(dir, "stderr")) =~ "{progress,started}"
   end
 
   test "Erlang flags in the user's environment do not reach the server" do
@@ -89,9 +89,28 @@ defmodule Reminisce.MCP.ReleaseTest do
     assert {0, _} = exit!(port, os_pid)
   end
 
+  # The release under test with `vm_args` appended to its vm.args: its bin and
+  # releases directories copied, everything else linked.
+  defp release_copy!(vm_args) do
+    root = Path.dirname(Path.dirname(Reminisce.MCPServer.command()))
+    copy = Path.join(System.tmp_dir!(), "t_rel_copy_" <> hex(5))
+    File.mkdir_p!(copy)
+    on_exit(fn -> File.rm_rf!(copy) end)
+
+    for entry <- File.ls!(root) do
+      if entry in ~w(bin releases),
+        do: File.cp_r!(Path.join(root, entry), Path.join(copy, entry)),
+        else: File.ln_s!(Path.join(root, entry), Path.join(copy, entry))
+    end
+
+    [_erts, vsn] = copy |> Path.join("releases/start_erl.data") |> File.read!() |> String.split()
+    File.write!(Path.join([copy, "releases", vsn, "vm.args"]), vm_args, [:append])
+    copy
+  end
+
   # The server in a working directory of its own, with stdin held open, its
   # stderr in that directory's `stderr` file.
-  defp start!(env \\ []) do
+  defp start!(env \\ [], server \\ Reminisce.MCPServer.command()) do
     db = "t_rel_" <> hex(5)
     dir = Path.join(System.tmp_dir!(), db)
     File.mkdir_p!(dir)
@@ -109,7 +128,7 @@ defmodule Reminisce.MCP.ReleaseTest do
         args: ["-c", ~s(exec $MCP_SERVER --owner agent:rel --database "$MCP_DB" 2>stderr)],
         env: [
           {~c"MCP_DB", String.to_charlist(db)},
-          {~c"MCP_SERVER", String.to_charlist(Reminisce.MCPServer.command())},
+          {~c"MCP_SERVER", String.to_charlist(server)},
           {~c"TYPEDB_URL",
            String.to_charlist(System.get_env("TYPEDB_URL", "http://127.0.0.1:8000"))},
           {~c"TYPEDB_PASSWORD", String.to_charlist(password())}
