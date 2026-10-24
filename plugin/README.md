@@ -71,7 +71,7 @@ And four skills:
 
 After the plugin updates, run `/noetic-reminisce:setup` again: the server it
 installed belongs to the old version. Server downloads exist only for
-releases from 0.5.0 on; an earlier plugin version finds none.
+releases from 0.5.1 on; an earlier plugin version finds none.
 
 The server runs on macOS 13 or newer (Apple silicon and Intel) and on Linux
 with glibc 2.28 or newer (x86_64 and arm64). Windows is not supported.

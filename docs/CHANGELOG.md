@@ -4,6 +4,10 @@ reminisce follows [Semantic Versioning](https://semver.org/). While it is
 `0.x`, a minor version may change the public API; every such change is listed
 here.
 
+## 0.5.1 (2026-10-24)
+
+- Compiles with no warnings on Elixir 1.19, the oldest the README names: a persona writer's answer is matched as a `Reminisce.Persona.Version` before it is updated. 0.5.0's public CI failed on that warning under `--warnings-as-errors`, so 0.5.0 was not published to Hex; 0.5.1 is the release.
+
 ## 0.5.0 (2026-10-24)
 
 The first release since 0.2.1. It holds what was built as 0.3, intentions

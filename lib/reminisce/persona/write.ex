@@ -1426,8 +1426,9 @@ defmodule Reminisce.Persona.Write do
   defp written(store, agent, number, change) do
     with {:ok, versions} <- Versions.versions(store, agent),
          {:ok, version} <- found(Enum.find(versions, &(&1.number == number))),
-         {:ok, answer} <- Versions.answer(store, agent, versions, version, nil, :all) do
-      {:ok, %Version{answer | change: change}}
+         {:ok, %Version{} = answer} <-
+           Versions.answer(store, agent, versions, version, nil, :all) do
+      {:ok, %{answer | change: change}}
     end
   end
 
