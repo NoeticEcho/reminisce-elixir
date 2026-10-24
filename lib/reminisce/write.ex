@@ -3,9 +3,9 @@
 
 defmodule Reminisce.Write do
   @moduledoc false
-  # remember, supersede, forget, relate, mark_recalled.
+  # remember, supersede, affect, forget, fulfil, relate, mark_recalled.
 
-  alias Reminisce.{Attrs, DB, Keys, Limits, Read, SecretGuard, Store, Telemetry}
+  alias Reminisce.{Affect, Attrs, DB, Keys, Limits, Read, SecretGuard, Store, Telemetry}
 
   # The owner's two values, given with every write that matches a memory by
   # key (see "the owner, in every write's own match" below).
@@ -14,25 +14,44 @@ defmodule Reminisce.Write do
   # -- remember ----------------------------------------------------------------
 
   def remember(%Store{} = store, owner, attrs) do
+    {affects, attrs} = pop_affects(attrs)
+
     with {:ok, owner} <- owner(owner),
          {:ok, a} <- Attrs.normalize(store, attrs),
-         :ok <- gate(store, :remember, owner, a) do
+         {:ok, affects} <- affects(store, affects),
+         :ok <- gate(store, :remember, owner, a),
+         local = a.key || new_key(),
+         :ok <- gate_affects(store, :remember, owner, affects, local),
+         a = stored_links(owner, a),
+         :ok <- Affect.none_affective(store, a.derived_from),
+         :ok <- none_persona(store, a.derived_from) do
       # Keys are per owner (Reminisce.Keys): the stored key cannot meet
       # another owner's, so a key is either this owner's (a retry) or new.
-      key = Keys.stored(owner, a.key || new_key())
-      a = stored_links(owner, a)
+      key = Keys.stored(owner, local)
 
       result =
         DB.write(store, fn q ->
           case existing_owner(q, key) do
-            {:ok, nil} -> with :ok <- insert(q, store, owner, key, a), do: {:ok, :inserted}
-            {:ok, ^owner} -> {:ok, :existing}
-            {:ok, _other} -> {:error, :not_found}
-            error -> error
+            {:ok, nil} ->
+              with :ok <- insert(q, store, owner, key, a),
+                   :ok <- write_affects(q, store, owner, key, affects),
+                   do: {:ok, :inserted}
+
+            {:ok, ^owner} ->
+              {:ok, :existing}
+
+            {:ok, _other} ->
+              {:error, :not_found}
+
+            error ->
+              error
           end
         end)
 
-      with {:ok, _} <- result, do: Read.load_one(store, key)
+      with {:ok, _} <- result,
+           {:ok, memory} <- Read.load_one(store, key),
+           :ok <- not_persona([memory]),
+           do: {:ok, memory}
     end
   end
 
@@ -41,13 +60,29 @@ defmodule Reminisce.Write do
   def supersede(%Store{} = store, owner, old_key, attrs) when is_binary(old_key) do
     with {:ok, owner} <- owner(owner),
          {:ok, old} <- Read.load_owned(store, owner, old_key),
-         :ok <- active(old),
-         {:ok, a} <- Attrs.normalize(store, attrs),
-         :ok <- gate(store, :supersede, owner, a) do
-      local = a.key || new_key()
+         :ok <- not_persona([old]),
+         :ok <- active(old) do
+      if :affective in old.aspects,
+        do: revise(store, owner, old, attrs),
+        else: supersede_memory(store, owner, old_key, attrs)
+    end
+  end
+
+  def supersede(_store, _owner, _old_key, _attrs), do: {:error, {:invalid, :key}}
+
+  defp supersede_memory(store, owner, old_key, attrs) do
+    {affects, attrs} = pop_affects(attrs)
+
+    with {:ok, a} <- Attrs.normalize(store, attrs),
+         {:ok, affects} <- affects(store, affects),
+         :ok <- gate(store, :supersede, owner, a),
+         local = a.key || new_key(),
+         :ok <- gate_affects(store, :supersede, owner, affects, local),
+         a = stored_links(owner, a),
+         :ok <- Affect.none_affective(store, a.derived_from),
+         :ok <- none_persona(store, a.derived_from) do
       key = Keys.stored(owner, local)
       old_key = Keys.stored(owner, old_key)
-      a = stored_links(owner, a)
       now = Store.now(store)
 
       result =
@@ -56,7 +91,8 @@ defmodule Reminisce.Write do
                :ok <- insert(q, store, owner, key, a),
                :ok <- retire(q, owner, old_key, :superseded, a.reason, now, close_valid: true),
                {:ok, _} <- link_supersession(q, owner, old_key, key),
-               :ok <- inherit_subjects(q, owner, old_key, key) do
+               :ok <- inherit_subjects(q, owner, old_key, key),
+               :ok <- write_affects(q, store, owner, key, affects) do
             {:ok, key}
           else
             # The owner's own key, already in use: never another owner's.
@@ -69,7 +105,116 @@ defmodule Reminisce.Write do
     end
   end
 
-  def supersede(_store, _owner, _old_key, _attrs), do: {:error, {:invalid, :key}}
+  # supersede/4 of an affective memory revises it (docs/spec.md §B.8): new
+  # numbers, the same object, holder and basis. Only another affect of the
+  # same object supersedes one.
+  defp revise(store, owner, old, attrs) do
+    with :ok <- if(memory_attrs?(attrs), do: {:error, {:invalid, :affective}}, else: :ok),
+         {:ok, af} <- Affect.normalize(store, attrs, :revise),
+         {:ok, af} <- Affect.revision(store, af, old),
+         :ok <- Affect.gate(store, :supersede, owner, af, old.object) do
+      old_key = Keys.stored(owner, old.key)
+      object = Keys.stored(owner, old.object)
+      now = Store.now(store)
+
+      DB.write(store, fn q ->
+        with :ok <- retire(q, owner, old_key, :superseded, af.reason, now, close_valid: true),
+             {:ok, {:inserted, key}} <-
+               Affect.write(q, store, owner, object, af, revises: old_key),
+             {:ok, _} <- link_supersession(q, owner, old_key, key) do
+          {:ok, key}
+        end
+      end)
+      |> case do
+        {:ok, key} -> Read.load_one(store, key)
+        error -> error
+      end
+    end
+  end
+
+  # A memory's own attributes, given to supersede an affect.
+  defp memory_attrs?(attrs) when is_map(attrs),
+    do: Enum.any?(Map.keys(attrs), &(&1 in [:aspects, "aspects", :affects, "affects"]))
+
+  defp memory_attrs?(_attrs), do: false
+
+  # -- affect (docs/spec.md Appendix B) ------------------------------------------
+
+  def affect(%Store{} = store, owner, object_key, attrs) when is_binary(object_key) do
+    with {:ok, owner} <- owner(owner),
+         :ok <- Limits.check(:key, object_key),
+         {:ok, af} <- Affect.normalize(store, attrs, :new),
+         :ok <- Affect.gate(store, :affect, owner, af, object_key),
+         {:ok, object} <- Read.load_owned(store, owner, object_key),
+         :ok <- affect_object(object) do
+      object = Keys.stored(owner, object_key)
+
+      DB.write(store, fn q -> Affect.write(q, store, owner, object, af, retry: true) end)
+      |> case do
+        {:ok, {_, key}} ->
+          with {:ok, memory} <- Read.load_one(store, key),
+               :ok <- not_persona([memory]),
+               do: {:ok, memory}
+
+        error ->
+          error
+      end
+    end
+  end
+
+  def affect(_store, _owner, _object_key, _attrs), do: {:error, {:invalid, :key}}
+
+  # There is no affect of an affect or of a strand, and none of a memory
+  # already withdrawn.
+  defp affect_object(%{aspects: aspects, key: key, status: status}) do
+    cond do
+      :affective in aspects -> {:error, {:invalid, :affective}}
+      :persona in aspects -> {:error, {:invalid, :persona}}
+      status == :withdrawn -> {:error, {:not_active, key}}
+      true -> :ok
+    end
+  end
+
+  # `affects:` of remember/3 and supersede/4, taken out before the memory's
+  # own attributes are read.
+  defp pop_affects(attrs) when is_map(attrs) do
+    {a, attrs} = Map.pop(attrs, :affects)
+    {s, attrs} = Map.pop(attrs, "affects")
+    {a || s, attrs}
+  end
+
+  defp pop_affects(attrs), do: {nil, attrs}
+
+  defp affects(_store, nil), do: {:ok, []}
+
+  defp affects(store, list) when is_list(list) and length(list) <= 8 do
+    Enum.reduce_while(list, {:ok, []}, fn attrs, {:ok, acc} ->
+      case Affect.normalize(store, attrs, :new) do
+        {:ok, af} -> {:cont, {:ok, acc ++ [af]}}
+        error -> {:halt, error}
+      end
+    end)
+  end
+
+  defp affects(_store, _), do: {:error, {:invalid, :affects}}
+
+  defp gate_affects(store, op, owner, affects, object) do
+    Enum.reduce_while(affects, :ok, fn af, :ok ->
+      case Affect.gate(store, op, owner, af, object) do
+        :ok -> {:cont, :ok}
+        error -> {:halt, error}
+      end
+    end)
+  end
+
+  defp write_affects(q, store, owner, key, affects) do
+    Enum.reduce_while(affects, :ok, fn af, :ok ->
+      case Affect.write(q, store, owner, key, af) do
+        {:ok, {:inserted, _}} -> {:cont, :ok}
+        error -> {:halt, error}
+      end
+    end)
+  end
 
   @doc false
   # Marks `old_key` superseded by an existing `new_key`, for importers that
@@ -79,8 +224,10 @@ defmodule Reminisce.Write do
 
     with {:ok, owner} <- owner(owner),
          :ok <- guard(:supersede, reason),
-         {:ok, _} <- Read.load_owned(store, owner, old_key),
-         {:ok, _} <- Read.load_owned(store, owner, new_key) do
+         {:ok, old} <- Read.load_owned(store, owner, old_key),
+         {:ok, new} <- Read.load_owned(store, owner, new_key),
+         :ok <- not_affective([old, new]),
+         :ok <- not_persona([old, new]) do
       {old_key, new_key} = {Keys.stored(owner, old_key), Keys.stored(owner, new_key)}
 
       DB.write(store, fn q ->
@@ -139,6 +286,7 @@ defmodule Reminisce.Write do
          :ok <- guard(:forget, reason),
          {:ok, owner} <- owner(owner),
          {:ok, memory} <- Read.load_owned(store, owner, key),
+         :ok <- not_persona([memory]),
          :ok <- active(memory),
          stored = Keys.stored(owner, key),
          {:ok, _} <-
@@ -152,11 +300,105 @@ defmodule Reminisce.Write do
 
   def forget(_store, _owner, _key, _opts), do: {:error, {:invalid, :key}}
 
+  # -- fulfil (docs/spec.md §A.2) ------------------------------------------------
+
+  def fulfil(%Store{} = store, owner, key, opts) when is_binary(key) and is_list(opts) do
+    by = opts[:by] || []
+    reason = opts[:reason]
+
+    with :ok <- Limits.check(:key, key),
+         :ok <- if(is_list(by), do: Limits.check(:key, by), else: {:error, {:invalid, :by}}),
+         :ok <- Limits.check(:reason, reason),
+         :ok <-
+           if(Enum.all?(by, &(is_binary(&1) and &1 != "")),
+             do: :ok,
+             else: {:error, {:invalid, :by}}
+           ),
+         :ok <-
+           if(is_nil(reason) or (is_binary(reason) and reason != ""),
+             do: :ok,
+             else: {:error, {:invalid, :reason}}
+           ),
+         :ok <- if(key in by, do: {:error, {:invalid, :by}}, else: :ok),
+         :ok <- guard(:fulfil, [reason, key | by]),
+         {:ok, owner} <- owner(owner),
+         {:ok, memory} <- Read.load_owned(store, owner, key),
+         :ok <- intention(memory),
+         by = Enum.uniq(by),
+         :ok <- deeds(store, owner, by) do
+      stored = Keys.stored(owner, key)
+      now = Store.now(store)
+
+      DB.write(store, fn q ->
+        with :ok <-
+               retire(q, owner, stored, :archived, reason || "fulfilled", now,
+                 outcome: "fulfilled"
+               ),
+             :ok <- link_fulfilment(q, owner, stored, Enum.map(by, &Keys.stored(owner, &1))) do
+          {:ok, stored}
+        end
+      end)
+      |> case do
+        {:ok, stored} -> Read.load_one(store, stored)
+        {:error, {:not_active, _}} -> {:error, :not_active}
+        error -> error
+      end
+    end
+  end
+
+  def fulfil(_store, _owner, _key, _opts), do: {:error, {:invalid, :key}}
+
+  # Fulfilling an intention twice is refused: the first archived it.
+  defp intention(%{status: status}) when status != :active, do: {:error, :not_active}
+
+  defp intention(%Reminisce.Memory{} = m) do
+    if :prospective in m.aspects and (m.due_at != nil or m.cues != []),
+      do: :ok,
+      else: {:error, :not_an_intention}
+  end
+
+  # A deed is any memory of the owner's; another owner's key answers exactly
+  # as an unknown one does.
+  defp deeds(_store, _owner, []), do: :ok
+
+  defp deeds(store, owner, keys) do
+    with {:ok, memories} <- Read.load(store, Enum.map(keys, &Keys.stored(owner, &1))) do
+      if length(memories) == length(keys) and Enum.all?(memories, &(&1.owner == owner)),
+        do: with(:ok <- not_affective(memories), do: not_persona(memories)),
+        else: {:error, :unknown_deed}
+    end
+  end
+
+  defp link_fulfilment(_q, _owner, _key, []), do: :ok
+
+  defp link_fulfilment(q, owner, key, deeds) do
+    q.(
+      """
+      given $i: string, $d: string, #{@owner_given};
+      match #{owned("$m", "$i")}; #{owned("$n", "$d")};
+      insert (intention: $m, deed: $n) isa fulfilment;
+      """,
+      Enum.map(deeds, &owned_row(owner, %{"i" => key, "d" => &1}))
+    )
+    |> expect_rows(length(deeds), :unknown_deed)
+    |> ok()
+  end
+
+  @outcomes ~w(fulfilled expired)
+
   @doc false
   # Moves an active memory of `owner`'s to `status`. Fails if the memory is not
-  # active, so two writers cannot both retire it.
+  # active, so two writers cannot both retire it. `outcome:` sets an
+  # intention's `intention_outcome`, one of two fixed values.
   def retire(q, owner, key, status, reason, now, opts \\ []) do
     reason_stmt = if reason, do: ", has status_reason == $reason", else: ""
+
+    outcome_stmt =
+      case opts[:outcome] do
+        nil -> ""
+        outcome when outcome in @outcomes -> ~s(, has intention_outcome "#{outcome}")
+      end
+
     reason_given = if reason, do: ", $reason: string", else: ""
 
     row =
@@ -168,7 +410,7 @@ defmodule Reminisce.Write do
              """
              given $k: string, $s: string, $now: datetime-tz, #{@owner_given}#{reason_given};
              match #{owned("$m", "$k")}, has status "active";
-             update $m has status == $s, has status_changed_at == $now#{reason_stmt};
+             update $m has status == $s, has status_changed_at == $now#{reason_stmt}#{outcome_stmt};
              """,
              [row]
            )
@@ -273,7 +515,7 @@ defmodule Reminisce.Write do
 
     with {:ok, memories} <- Read.load(store, keys) do
       if length(memories) == length(keys) and Enum.all?(memories, &(&1.owner == owner)),
-        do: :ok,
+        do: with(:ok <- not_affective(memories), do: not_persona(memories)),
         else: {:error, :unknown_claim}
     end
   end
@@ -422,7 +664,8 @@ defmodule Reminisce.Write do
   def mark_recalled(%Store{} = store, owner, keys) when is_list(keys) do
     with {:ok, owner} <- owner(owner),
          true <- Enum.all?(keys, &is_binary/1) || {:error, {:invalid, :keys}},
-         :ok <- Limits.check(:key, keys) do
+         :ok <- Limits.check(:key, keys),
+         :ok <- none_persona(store, keys |> Enum.uniq() |> Enum.map(&Keys.stored(owner, &1))) do
       now = Store.now(store)
 
       # Only the owner's own memories are counted; other keys are skipped.
@@ -493,9 +736,10 @@ defmodule Reminisce.Write do
 
   # Exactly the strings that will be written, in the form they are written:
   # a facet is stored as one `name=value` string, so that is what is scanned.
+  # A cue's value is scanned as given as well: a term cue is stored folded.
   defp stored_strings(a) do
     [a.content, a.subject, a.consent, a.key, a.reviewed_by, a.reason] ++
-      facet_strings(a.facets) ++ a.sources ++ a.derived_from
+      facet_strings(a.facets) ++ a.sources ++ a.derived_from ++ a.cues ++ a.cue_words
   end
 
   defp facet_strings(facets), do: Enum.map(facets, fn {n, v} -> "#{n}=#{v}" end)
@@ -527,6 +771,47 @@ defmodule Reminisce.Write do
       aspect -> if a.reviewed_by, do: :ok, else: {:error, {:review_required, aspect}}
     end
   end
+
+  # An affect takes no part in a relation, a fulfilment or another memory's
+  # supersession (docs/spec.md §B.2).
+  defp not_affective(memories) do
+    if Enum.any?(memories, &(:affective in &1.aspects)),
+      do: {:error, {:invalid, :affective}},
+      else: :ok
+  end
+
+  # A strand of the persona DNA is never a claim, a ground, an affect's
+  # object or the memory a verb names: it changes only by a new version
+  # (docs/spec.md §C.2).
+  defp not_persona(memories) do
+    if Enum.any?(memories, &(:persona in &1.aspects)),
+      do: {:error, {:invalid, :persona}},
+      else: :ok
+  end
+
+  @persona_keys """
+  given $k: string;
+  match $m isa memory, has memory_key == $k, has aspect "persona";
+  select $m;
+  """
+
+  @doc false
+  # Refuses stored keys of which one is a strand.
+  def none_persona(_store_or_q, []), do: :ok
+
+  def none_persona(%Store{} = store, keys),
+    do:
+      store
+      |> DB.read(@persona_keys, Enum.map(keys, &%{"k" => &1}))
+      |> DB.rows()
+      |> refuse_persona()
+
+  def none_persona(q, keys) when is_function(q, 2),
+    do: q.(@persona_keys, Enum.map(keys, &%{"k" => &1})) |> DB.rows() |> refuse_persona()
+
+  defp refuse_persona({:ok, []}), do: :ok
+  defp refuse_persona({:ok, _}), do: {:error, {:invalid, :persona}}
+  defp refuse_persona(error), do: error
 
   defp active(%{status: :active}), do: :ok
   defp active(%{key: key}), do: {:error, {:not_active, key}}
@@ -610,6 +895,7 @@ defmodule Reminisce.Write do
              "facet",
              Enum.map(a.facets, &"#{elem(&1, 0)}=#{elem(&1, 1)}")
            ),
+         :ok <- add_values(q, owner, key, "cue", a.cues),
          :ok <- add_sources(q, owner, key, a.sources),
          :ok <- add_derivations(q, owner, key, a.derived_from),
          :ok <- add_subject(q, owner, key, a.subject, a.consent) do
@@ -619,7 +905,7 @@ defmodule Reminisce.Write do
 
   defp add_values(_q, _owner, _key, _attr, []), do: :ok
 
-  defp add_values(q, owner, key, attr, values) when attr in ["aspect", "facet"] do
+  defp add_values(q, owner, key, attr, values) when attr in ["aspect", "facet", "cue"] do
     q.(
       """
       given $k: string, $v: string, #{@owner_given};
@@ -631,9 +917,10 @@ defmodule Reminisce.Write do
     |> ok()
   end
 
-  defp add_sources(_q, _owner, _key, []), do: :ok
+  @doc false
+  def add_sources(_q, _owner, _key, []), do: :ok
 
-  defp add_sources(q, owner, key, refs) do
+  def add_sources(q, owner, key, refs) do
     rows = Enum.map(refs, &owned_row(owner, %{"k" => key, "r" => &1}))
 
     with {:ok, _} <-
@@ -653,11 +940,12 @@ defmodule Reminisce.Write do
     end
   end
 
-  defp add_derivations(_q, _owner, _key, []), do: :ok
+  @doc false
+  def add_derivations(_q, _owner, _key, []), do: :ok
 
   # A memory derives only from its own owner's memories: another owner's key
   # answers exactly as an unknown one does.
-  defp add_derivations(q, owner, key, parents) do
+  def add_derivations(q, owner, key, parents) do
     q.(
       """
       given $k: string, $p: string, #{@owner_given};

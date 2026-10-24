@@ -1,0 +1,309 @@
+#!/bin/sh
+# SPDX-FileCopyrightText: 2026 NoeticEcho and the reminisce contributors
+# SPDX-License-Identifier: Apache-2.0
+#
+# Builds the MCP server as a release with its own runtime, for the platform it
+# runs on, and packs it with its checksum (docs/server-artifact.md):
+#
+#   scripts/build-server [OUT_DIR]
+#
+# leaves in OUT_DIR (default _build/server/dist):
+#
+#   reminisce-mcp-VERSION-OS-ARCH.tar.gz
+#   reminisce-mcp-VERSION-OS-ARCH.tar.gz.sha256
+#
+# OS is linux or macos, ARCH is x86_64 or arm64. The runtime is OTP built
+# from source with OpenSSL linked into it statically, its own zlib, and no
+# termcap; Elixir is the precompiled build for that OTP; Hex and rebar3, which
+# fetch and build the dependencies that mix.lock pins, are pinned too. Each
+# download is pinned by version and SHA-256 below and checked before it is
+# used. The Linux build is meant to run on AlmaLinux 8 (the manylinux_2_28
+# image, glibc 2.28), so that it runs on that and newer.
+#
+# Needs a C and C++ compiler, make, perl, curl, unzip and tar; no ncurses and
+# no OpenSSL. Takes a while: OpenSSL and OTP are compiled.
+#
+# A mirror may stand in for a download: set OTP_URL and OTP_SHA256 (or
+# OPENSSL_URL and OPENSSL_SHA256, ELIXIR_URL and ELIXIR_SHA256, HEX_URL and
+# HEX_SHA256, REBAR_URL and REBAR_SHA256) together. The checksum is still
+# checked; a release is built from the pins below only. A mirror is for a
+# build that cannot reach the origin (an air-gapped one, a cache): it does not
+# change which bytes are accepted, so a mirror that serves anything but the
+# pinned file fails the build. Never set one in the release workflow.
+set -eu
+
+OTP_VERSION=29.1.1
+OTP_URL=${OTP_URL:-https://github.com/erlang/otp/releases/download/OTP-$OTP_VERSION/otp_src_$OTP_VERSION.tar.gz}
+OTP_SHA256=${OTP_SHA256:-054e0143e39c780e091107fc9b345792a9c1a55f6bac1eca1c1101510fc06bf6}
+
+OPENSSL_VERSION=3.5.9
+OPENSSL_URL=${OPENSSL_URL:-https://github.com/openssl/openssl/releases/download/openssl-$OPENSSL_VERSION/openssl-$OPENSSL_VERSION.tar.gz}
+OPENSSL_SHA256=${OPENSSL_SHA256:-603f5602e2eef00d77fbd429d34dcd5822bb301757a1bc9cdb24c670f1eb859a}
+
+ELIXIR_VERSION=1.20.4
+ELIXIR_URL=${ELIXIR_URL:-https://builds.hex.pm/builds/elixir/v$ELIXIR_VERSION-otp-29.zip}
+ELIXIR_SHA256=${ELIXIR_SHA256:-7863c546cda13fecc949e562e326042451dacf8fd8698a36783cb71eeb223b46}
+
+# Hex and rebar3 as Mix would install them for this Elixir on OTP 29
+# (mix local.hex, mix local.rebar: the builds that installs/hex.csv and
+# installs/rebar.csv name for it), from the same place, but pinned. A build of
+# Hex for an older OTP does not load on OTP 29.
+HEX_VERSION=2.5.1
+HEX_URL=${HEX_URL:-https://builds.hex.pm/installs/1.20.0/hex-$HEX_VERSION-otp-29.ez}
+HEX_SHA256=${HEX_SHA256:-05ec9f68a512381b0053cf7e92eebea201709b7754dc288ea9b2663f88314730}
+
+REBAR_VERSION=3.25.1
+REBAR_URL=${REBAR_URL:-https://builds.hex.pm/installs/1.18.4/rebar3-$REBAR_VERSION-otp-28}
+REBAR_SHA256=${REBAR_SHA256:-8dead71212b8008ec830c085607c23ec2997ab1c36a3c91901ac42c9814ee08c}
+
+# Where OpenSSL believes it is installed: the directories it would read a
+# configuration, engines and providers from. A fixed path that a user's
+# machine does not have, never the build's own directory; the server reads
+# none of them.
+OPENSSL_PREFIX=/opt/reminisce-openssl
+
+# macOS: the oldest version the runtime runs on, which every Mach-O file in
+# the release declares (checked below).
+MACOS_MIN=13.0
+
+# Linux: the shared libraries a file in the release may need, all from glibc.
+LINUX_LIBS="libc.so.6 libm.so.6 libdl.so.2 libpthread.so.0 librt.so.1 libutil.so.1
+ld-linux-x86-64.so.2 ld-linux-aarch64.so.1"
+
+fail() {
+  echo "build-server: $*" >&2
+  exit 1
+}
+
+say() {
+  echo "build-server: $*" >&2
+}
+
+root=$(cd "$(dirname "$0")/.." && pwd -P)
+work=${BUILD_SERVER_DIR:-$root/_build/server}
+out=${1:-$work/dist}
+
+case $(uname -s) in
+  Linux) os=linux ;;
+  Darwin) os=macos ;;
+  *) fail "unsupported system $(uname -s): Linux and macOS only" ;;
+esac
+
+case $(uname -m) in
+  x86_64 | amd64) arch=x86_64 ;;
+  aarch64 | arm64) arch=arm64 ;;
+  *) fail "unsupported architecture $(uname -m): x86_64 and arm64 only" ;;
+esac
+
+version=$(sed -n 's/^  @version "\(.*\)"$/\1/p' "$root/mix.exs")
+[ -n "$version" ] || fail "no @version in mix.exs"
+name=reminisce-mcp-$version-$os-$arch
+
+if command -v sha256sum >/dev/null 2>&1; then
+  sha256() { sha256sum "$1" | cut -d' ' -f1; }
+else
+  sha256() { shasum -a 256 "$1" | cut -d' ' -f1; }
+fi
+
+if [ "$os" = linux ]; then
+  jobs=$(nproc)
+else
+  jobs=$(sysctl -n hw.ncpu)
+  export MACOSX_DEPLOYMENT_TARGET=$MACOS_MIN
+fi
+
+# fetch URL SHA256 FILE: downloads URL to FILE unless FILE is there with the
+# right checksum, and fails unless the checksum matches.
+fetch() {
+  if [ ! -f "$3" ] || [ "$(sha256 "$3")" != "$2" ]; then
+    say "downloading $1"
+    curl -fsSL --retry 3 -o "$3.part" "$1"
+    mv "$3.part" "$3"
+  fi
+  got=$(sha256 "$3")
+  [ "$got" = "$2" ] || fail "$1: SHA-256 is $got, expected $2"
+}
+
+mkdir -p "$work/src" "$out"
+
+# OpenSSL, static only, position-independent so that it can be linked into
+# the crypto NIF. Configured for OPENSSL_PREFIX and installed under a staging
+# directory, so that the paths compiled into it are OPENSSL_PREFIX's.
+openssl_stage=$work/openssl-stage-$OPENSSL_SHA256
+openssl=$openssl_stage$OPENSSL_PREFIX
+if [ ! -f "$openssl/lib/libcrypto.a" ]; then
+  fetch "$OPENSSL_URL" "$OPENSSL_SHA256" "$work/src/openssl.tar.gz"
+  rm -rf "$work/src/openssl"
+  mkdir "$work/src/openssl"
+  tar -xzf "$work/src/openssl.tar.gz" -C "$work/src/openssl" --strip-components 1
+  say "building OpenSSL"
+  (
+    cd "$work/src/openssl"
+    ./Configure --prefix="$OPENSSL_PREFIX" --libdir=lib --openssldir="$OPENSSL_PREFIX/ssl" \
+      no-shared no-tests no-docs no-apps -fPIC
+    make -j"$jobs" >/dev/null
+    make install_sw DESTDIR="$openssl_stage" >/dev/null
+  )
+fi
+
+# OTP with that OpenSSL in it, its own zlib, and nothing it does not need.
+otp=$work/otp-$OTP_SHA256-$OPENSSL_SHA256-builtin-zlib
+if [ ! -x "$otp/bin/erl" ]; then
+  fetch "$OTP_URL" "$OTP_SHA256" "$work/src/otp.tar.gz"
+  rm -rf "$work/src/otp"
+  mkdir "$work/src/otp"
+  tar -xzf "$work/src/otp.tar.gz" -C "$work/src/otp" --strip-components 1
+  say "building OTP"
+  (
+    cd "$work/src/otp"
+    if [ "$os" = linux ]; then
+      # libstdc++ (the JIT) and libgcc go in too: a minimal system may lack
+      # them or carry older ones.
+      export LDFLAGS="-static-libstdc++ -static-libgcc"
+    fi
+    ./configure --prefix="$otp" \
+      --with-ssl="$openssl" --disable-dynamic-ssl-lib --enable-builtin-zlib \
+      --without-termcap --without-javac --without-wx --without-odbc \
+      --without-jinterface --without-debugger --without-observer --without-et \
+      --without-megaco >/dev/null
+    make -j"$jobs" >/dev/null
+    make install >/dev/null
+    # What the release must carry for this runtime (see "Licences" below):
+    # OTP's licence, and OpenSSL's, which is linked into it.
+    mkdir -p "$otp/licenses"
+    cp LICENSE.txt "$otp/licenses/OTP-LICENSE.txt"
+    cp "$work/src/openssl/LICENSE.txt" "$otp/licenses/OpenSSL-LICENSE.txt"
+  )
+fi
+
+# Elixir, precompiled for this OTP.
+elixir=$work/elixir-$ELIXIR_SHA256
+if [ ! -x "$elixir/bin/elixir" ]; then
+  fetch "$ELIXIR_URL" "$ELIXIR_SHA256" "$work/src/elixir.zip"
+  rm -rf "$elixir"
+  mkdir -p "$elixir"
+  unzip -q "$work/src/elixir.zip" -d "$elixir"
+fi
+
+# The release, with Mix's state kept apart from the developer's.
+export PATH="$elixir/bin:$otp/bin:$PATH"
+export MIX_ENV=prod
+export MIX_HOME="$work/mix"
+export HEX_HOME="$work/hex"
+export MIX_BUILD_ROOT="$work/build"
+export MIX_DEPS_PATH="$work/deps"
+export ELIXIR_ERL_OPTIONS="+fnu"
+
+say "building the release with OTP $(erl -noshell -eval 'io:put_chars(erlang:system_info(otp_release)), halt().') and Elixir $ELIXIR_VERSION"
+rel=$work/rel/$name
+rm -rf "$rel"
+(
+  cd "$root"
+  fetch "$HEX_URL" "$HEX_SHA256" "$work/src/hex-$HEX_SHA256.ez"
+  fetch "$REBAR_URL" "$REBAR_SHA256" "$work/src/rebar3-$REBAR_SHA256"
+  rm -rf "$MIX_HOME/archives"
+  mix archive.install "$work/src/hex-$HEX_SHA256.ez" --force >/dev/null
+  mix local.rebar rebar3 "$work/src/rebar3-$REBAR_SHA256" --force >/dev/null
+  mix deps.get --only prod >/dev/null
+  mix release reminisce --overwrite --quiet --path "$rel"
+)
+
+# Licences: the tarball carries this project's LICENSE and NOTICE, and the
+# licence of everything compiled or linked into it: OTP, OpenSSL, Elixir, and
+# each dependency the release contains. Apache-2.0 section 4 and the licences
+# of the others require them to travel with the binary.
+say "adding licences"
+cp "$root/LICENSE" "$root/NOTICE" "$rel/"
+lic=$rel/licenses
+mkdir -p "$lic"
+for f in OTP-LICENSE.txt OpenSSL-LICENSE.txt; do
+  [ -f "$otp/licenses/$f" ] || fail "$otp/licenses/$f is missing: remove $otp to build OTP again"
+  cp "$otp/licenses/$f" "$lic/$f"
+done
+[ -f "$elixir/LICENSE" ] || fail "$elixir/LICENSE is missing from the Elixir build"
+cp "$elixir/LICENSE" "$lic/Elixir-LICENSE"
+for appdir in "$rel"/lib/*; do
+  app=$(basename "$appdir")
+  app=${app%-*}
+  dep=$MIX_DEPS_PATH/$app
+  [ -d "$dep" ] || continue
+  found=0
+  for f in "$dep"/LICENSE* "$dep"/NOTICE* "$dep"/COPYING*; do
+    [ -f "$f" ] || continue
+    cp "$f" "$lic/$app-$(basename "$f")"
+    found=1
+  done
+  if [ "$found" = 0 ]; then
+    # A package that ships no licence file (nimble_pool): what it declares in
+    # its metadata, which is all there is to carry.
+    declared=$(sed -n 's/^{<<"licenses">>,\[\(.*\)\]}\.$/\1/p' "$dep/hex_metadata.config" 2>/dev/null | tr -d '<>"')
+    [ -n "$declared" ] || fail "dependency $app has no licence file and declares no licence"
+    printf '%s ships no licence file; its package metadata declares: %s\n' "$app" "$declared" >"$lic/$app-LICENSE-DECLARED.txt"
+  fi
+done
+for f in LICENSE NOTICE licenses/OTP-LICENSE.txt licenses/OpenSSL-LICENSE.txt licenses/Elixir-LICENSE; do
+  [ -s "$rel/$f" ] || fail "the release lacks $f"
+done
+
+# What it links: every executable and library in the release, against an
+# allowlist. On Linux, glibc's own libraries (LINUX_LIBS); on macOS, the
+# system's (/usr/lib, /System/Library), and a declared minimum of MACOS_MIN.
+say "checking what the release links"
+magic() { od -An -tx1 -N4 "$1" | tr -d ' \n'; }
+checked=0
+for f in $(find "$rel" -type f); do
+  case $os-$(magic "$f") in
+    linux-7f454c46)
+      for lib in $(readelf -d "$f" | sed -n 's/.*(NEEDED).*\[\(.*\)\]/\1/p'); do
+        case " $(echo $LINUX_LIBS) " in
+          *" $lib "*) ;;
+          *) fail "$f needs $lib, which is not glibc's: a clean machine may lack it" ;;
+        esac
+      done
+      ;;
+    macos-cffaedfe)
+      for lib in $(otool -L "$f" | tail -n +2 | awk '{print $1}'); do
+        case $lib in
+          /usr/lib/* | /System/Library/*) ;;
+          *) fail "$f links $lib, which is not the system's: a clean machine may lack it" ;;
+        esac
+      done
+      minos=$(otool -l "$f" | awk '/LC_BUILD_VERSION/ {b = 1} b && $1 == "minos" {print $2; exit}')
+      [ -n "$minos" ] || fail "$f declares no minimum macOS version"
+      [ "$(printf '%s\n%s\n' "$minos" "$MACOS_MIN" | sort -t. -k1,1n -k2,2n | tail -1)" = "$MACOS_MIN" ] ||
+        fail "$f needs macOS $minos, newer than $MACOS_MIN"
+      ;;
+    *) continue ;;
+  esac
+  checked=$((checked + 1))
+done
+[ "$checked" -gt 0 ] || fail "no executable or library found in the release"
+say "$checked executables and libraries link only the system's"
+
+# Debug sections are of no use to the server and weigh on the tarball.
+if [ "$os" = linux ] && command -v strip >/dev/null 2>&1; then
+  for f in $(find "$rel" -type f); do
+    [ "$(magic "$f")" = 7f454c46 ] && strip --strip-debug "$f" 2>/dev/null || true
+  done
+fi
+
+# OpenSSL's compiled-in directories are OPENSSL_PREFIX's, not the build's.
+crypto=$(ls "$rel"/lib/crypto-*/priv/lib/crypto.so)
+for dir in OPENSSLDIR ENGINESDIR MODULESDIR; do
+  line=$(strings "$crypto" | grep "^$dir: " || true)
+  case $line in
+    "$dir: \"$OPENSSL_PREFIX/"*) ;;
+    *) fail "crypto.so: $dir is not under $OPENSSL_PREFIX: ${line:-missing}" ;;
+  esac
+done
+
+# A release that starts: no TypeDB is needed to refuse a missing option.
+if "$rel/bin/reminisce-mcp" </dev/null >/dev/null 2>&1; then
+  fail "bin/reminisce-mcp without options exited 0"
+fi
+
+tarball=$out/$name.tar.gz
+tar -czf "$tarball" -C "$work/rel" "$name"
+(cd "$out" && echo "$(sha256 "$name.tar.gz")  $name.tar.gz" >"$name.tar.gz.sha256")
+
+echo "$tarball"

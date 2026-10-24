@@ -1,0 +1,19 @@
+## Flags for the VM of the release (docs/server-artifact.md).
+
+## File names and the command line are UTF-8, whatever the locale.
++fnu
+
+## No Erlang distribution: no port mapper, no listening port.
+-start_epmd false
+
+## stdout and stdin are the MCP stream. No break handler, so SIGINT ends the
+## server instead of printing the BREAK menu on stdout and reading an answer
+## from stdin; and no shell or other reader of stdin but the server's own.
++Bd
+-noinput
+
+## stdout is the MCP stream: the default log handler writes to stderr from the
+## moment the VM boots, before any application starts (the quotes keep the
+## "#" from starting a comment). config/config.exs does the same for Elixir's
+## Logger, which takes the handler over when it starts.
+-kernel logger '[{handler,default,logger_std_h,#{config=>#{type=>standard_error}}}]'

@@ -1,0 +1,115 @@
+#!/bin/sh
+# SPDX-FileCopyrightText: 2026 NoeticEcho and the reminisce contributors
+# SPDX-License-Identifier: Apache-2.0
+#
+# TypeDB for reminisce in one command: starts the TypeDB of compose.yaml
+# (beside this script) with Docker, waits until it serves, replaces its admin
+# user's default password with TYPEDB_PASSWORD, and creates reminisce's
+# database and schema. Running it again changes nothing.
+#
+# A new TypeDB has a default admin password until this script replaces it. So
+# when anything fails after TypeDB was started, the script stops it (`docker
+# compose stop`: its data volume is kept) and says so; it is never left
+# running on the default password. Run it again once the cause is fixed.
+#
+#   TYPEDB_PASSWORD=... plugin/typedb/first-run
+#
+# The password is read from the environment only. This script writes no file,
+# and passes the password to no command line: the server reads it from its
+# own environment.
+#
+# Environment:
+#   TYPEDB_PASSWORD         (required) the admin password to set, or the one
+#                           already set; not TypeDB's default, "password"
+#   REMINISCE_DATABASE      the database (default reminisce)
+#   REMINISCE_TYPEDB_PORT   the port on 127.0.0.1 (default 8000)
+#   REMINISCE_TYPEDB_PROJECT  the compose project (default reminisce-typedb)
+#   REMINISCE_MCP_SERVER    the server to set the database up with (default
+#                           ../server/bin/reminisce-mcp from this directory)
+#   REMINISCE_TYPEDB_WAIT   seconds to wait for TypeDB to serve (default 120)
+
+set -eu
+
+here=$(cd "$(dirname "$0")" && pwd)
+database=${REMINISCE_DATABASE:-reminisce}
+port=${REMINISCE_TYPEDB_PORT:-8000}
+project=${REMINISCE_TYPEDB_PROJECT:-reminisce-typedb}
+# REMINISCE_MCP_SERVER, when given, is a command that may have arguments (a
+# development checkout's `mix reminisce.mcp`) and is split into words; the
+# default is one path, which may hold spaces.
+if [ -n "${REMINISCE_MCP_SERVER:-}" ]; then
+  server=$REMINISCE_MCP_SERVER
+  split=1
+else
+  server=$here/../server/bin/reminisce-mcp
+  split=0
+fi
+wait_seconds=${REMINISCE_TYPEDB_WAIT:-120}
+url=http://127.0.0.1:$port
+
+say() { printf 'first-run: %s\n' "$*" >&2; }
+fail() {
+  say "$*"
+  exit 1
+}
+
+[ -n "${TYPEDB_PASSWORD:-}" ] ||
+  fail "TYPEDB_PASSWORD is not set. Set it to the password the TypeDB admin user should have (the plugin's settings pass it), then run this again."
+[ "$TYPEDB_PASSWORD" != password ] ||
+  fail "TYPEDB_PASSWORD is TypeDB's default password, which anyone can sign in with. Choose another."
+
+case $port in
+'' | *[!0-9]*) fail "REMINISCE_TYPEDB_PORT is not a port number: $port" ;;
+esac
+
+command -v docker >/dev/null 2>&1 ||
+  fail "Docker is not installed. Install Docker (with its compose plugin) and run this again, or run TypeDB 3.12 or later yourself and set TYPEDB_URL."
+docker compose version >/dev/null 2>&1 ||
+  fail "'docker compose' does not work here: install Docker's compose plugin, or start the Docker daemon, and run this again."
+command -v curl >/dev/null 2>&1 ||
+  fail "curl is not installed; it is needed to wait for TypeDB to start."
+if [ "$split" = 0 ]; then
+  [ -x "$server" ] || fail "no server at $server: download the reminisce server first, or set REMINISCE_MCP_SERVER."
+else
+  case $server in
+  *' '*) ;;
+  *) [ -x "$server" ] || fail "no server at $server: download the reminisce server first, or set REMINISCE_MCP_SERVER." ;;
+  esac
+fi
+
+# From here TypeDB may be running on its default password: any way out of the
+# script but success stops it (the volume stays).
+finished=0
+stop_typedb() {
+  [ "$finished" = 1 ] && return 0
+  say "stopping TypeDB again so that it is not left on its default password (its data is kept); run this again once the cause is fixed. To stop it by hand: docker compose -p $project stop"
+  docker compose -p "$project" -f "$here/compose.yaml" stop >&2 ||
+    say "could not stop it: run 'docker compose -p $project stop' yourself."
+}
+trap stop_typedb EXIT
+trap 'exit 1' HUP INT TERM
+
+say "starting TypeDB (compose project $project) on $url"
+REMINISCE_TYPEDB_PORT=$port docker compose -p "$project" -f "$here/compose.yaml" up -d --quiet-pull >&2 ||
+  fail "docker compose could not start TypeDB; its output is above. If the port is taken, set REMINISCE_TYPEDB_PORT to a free one."
+
+waited=0
+until curl -fsS --max-time 5 "$url/health" >/dev/null 2>&1; do
+  [ "$waited" -lt "$wait_seconds" ] ||
+    fail "TypeDB did not answer at $url within ${wait_seconds}s. See: docker compose -p $project logs"
+  sleep 1
+  waited=$((waited + 1))
+done
+
+say "setting up the database $database"
+if [ "$split" = 1 ]; then
+  # shellcheck disable=SC2086
+  TYPEDB_URL=$url TYPEDB_USERNAME=admin $server --init --replace-default-password --database "$database" >&2 ||
+    fail "the database was not set up; the reason is above."
+else
+  TYPEDB_URL=$url TYPEDB_USERNAME=admin "$server" --init --replace-default-password --database "$database" >&2 ||
+    fail "the database was not set up; the reason is above."
+fi
+
+finished=1
+say "done: TypeDB serves reminisce at $url, database $database"

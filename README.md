@@ -2,7 +2,7 @@
 
 Agent memory on TypeDB: an Elixir library with an MCP face.
 
-Status: **0.2.1.** Its releases are on [Hex](https://hex.pm/packages/reminisce).
+Status: **0.5.0.** Its releases are on [Hex](https://hex.pm/packages/reminisce).
 While it is `0.x`, a minor version may change the public API;
 [`docs/CHANGELOG.md`](docs/CHANGELOG.md) lists every such change. The design is [`docs/spec.md`](docs/spec.md), and its §9 is the
 readiness test this release passes in CI.
@@ -51,9 +51,39 @@ readiness test this release passes in CI.
 - **Backs up and restores** logically. The backup is generated from whatever
   schema the database holds, host types included. Backing up, restoring and
   backing up again gives byte-identical files.
-- **Speaks MCP** over stdio with four tools: `memory_remember`, `memory_recall`,
-  `memory_forget` and `memory_why`. A server serves exactly one owner, fixed at
-  start.
+- **Keeps intentions** (from 0.5): a prospective memory with a `due_at`, or
+  with cues (an event, a term, a source, a memory, the audience), is an
+  intention. Recall answers the intentions now due beside its memories, never
+  among them, each with the triggers that fired; `fulfil/4` marks one done,
+  and a pass archives one past its `valid_to` as expired. An `:observed`
+  intention is never due unless the store allows it.
+- **Holds a focus across a session** (from 0.5): a bounded value the caller
+  passes from one recall to the next (`Reminisce.Focus`). Earlier queries of
+  the session help rank later ones, but never above a memory the query itself
+  matches, and an intention it has surfaced is not surfaced again. Nothing of
+  it is stored.
+- **Weighs how a memory was felt** (from 0.5): an affect, a valence and an
+  arousal recorded about one of the owner's memories, whether the owner felt
+  it or a person the memory concerns, makes that memory easier to recall and
+  slower to fade, within bounds the store sets. It is never evidence of what
+  is true, and a memory goes inactive when its twin with no affect would. An
+  affect about a person needs a scope, is seen only by that person's
+  audience, and goes with the person's other memories when they are
+  withdrawn.
+- **Keeps a character, the persona DNA** (from 0.5): versions of strands
+  (values, boundaries, a voice, relationships and an origin), each resting
+  on memories, that only the host writes. A keeper sets a version; a pass may
+  propose a change of voice or relationship, which a keeper adopts or
+  declines; an agent can be forked from another. Recall lifts a memory a
+  strand rests on, a little, and never above what is true. Readings of the
+  agent's own statements against its strands report drift. No text, tool
+  result or memory changes it. A strand about a person needs a scope, is
+  shown only to that person's audience, and goes when they withdraw.
+- **Speaks MCP** over stdio with eight tools: `memory_remember`,
+  `memory_intend`, `memory_affect`, `memory_recall`, `memory_fulfil`,
+  `memory_forget`, `memory_why` and `memory_persona`, which only reads. A
+  server serves exactly one owner, fixed at start, and keeps one focus per
+  connection.
 
 ## What it does not do
 
@@ -113,13 +143,13 @@ built by string concatenation from caller input. It runs on the
 Add it to the `deps` in your `mix.exs`:
 
 ```elixir
-{:reminisce, "~> 0.2"}
+{:reminisce, "~> 0.5"}
 ```
 
 Or, from its git repository at a release tag:
 
 ```elixir
-{:reminisce, git: "https://github.com/NoeticEcho/reminisce-elixir.git", tag: "v0.2.1"}
+{:reminisce, git: "https://github.com/NoeticEcho/reminisce-elixir.git", tag: "v0.5.0"}
 ```
 
 Then run `mix deps.get`. The library needs a TypeDB server to talk to;
@@ -167,6 +197,12 @@ should be reached at an `https://` address: the driver signs in with the
 password and then sends a token with every request, and over plain `http://`
 both cross the network as they are.
 
+An `https://` server's certificate is checked against the operating system's
+trust store. For a server whose certificate a private authority signed, the
+MCP server (below) reads that authority's PEM file from `TYPEDB_CACERTFILE`;
+the library takes it as Finch's `transport_opts` in `TypeDB.start_link/1`'s
+`:http` option.
+
 Every function returns `{:ok, _}` or `{:error, reason}` (`setup/1` returns
 `:ok`), and none raises for a domain refusal. Error reasons name rules and
 fields, and keys only of memories that exist; never a memory's words, and never
@@ -177,19 +213,27 @@ never an empty answer.
 
 | function | what it does |
 |---|---|
-| `setup/1` | creates the database if needed and defines the schema. It refuses a database whose copy of the library's types differs |
-| `remember/3` | writes one memory in one transaction. `:key` makes a retry idempotent |
-| `recall/4` | ranks memories deterministically. Options: `:k` (default 8, at most 50), `:aspects`, `:subject`, `:as_of`, `:similarity`, `:expand` (0) |
-| `forget/4` | `status: :inactive \| :archived \| :forgotten`, `reason:`. Keeps the words |
-| `why/4` | explains one memory. `depth: 1..10`, default 3 |
-| `supersede/4` | writes a new memory, marks the old one superseded, closes its `valid_to` and links the two, all in one transaction |
+| `setup/1` | creates the database if needed and defines the schema. It refuses a database whose copy of the library's types differs, and a 0.2, 0.3 or 0.4 store with `{:upgrade_needed, release}` |
+| `upgrade/1` | brings a 0.2, 0.3 or 0.4 store to this release: one additive `define`, no data written. See [Upgrading from 0.2, 0.3 or 0.4](#upgrading-from-02-03-or-04) |
+| `remember/3` | writes one memory in one transaction, with its affects (`affects:`). `:key` makes a retry idempotent |
+| `affect/4` | records how one of the owner's memories was felt: an affective memory. See [Affects](#affects) |
+| `recall/4` | ranks memories deterministically, and answers the intentions now due beside them. Options: `:k` (default 8, at most 50), `:aspects` (`:affective` among them returns affective memories too), `:subject`, `:as_of`, `:similarity`, `:expand` (0); for a session, `:focus`, `:events`, `:due_k` (default 3, at most 10) and `due: :all`. Each memory answers its `affects` |
+| `fulfil/4` | archives an active intention as fulfilled, `by:` the memories that did it, `reason:` |
+| `forget/4` | `status: :inactive \| :archived \| :forgotten`, `reason:`. Keeps the words. On an affect, clears it |
+| `why/4` | explains one memory. `depth: 1..10`, default 3; `subject:`, the audience, decides which affects it shows |
+| `supersede/4` | writes a new memory, marks the old one superseded, closes its `valid_to` and links the two, all in one transaction. On an affect, revises it |
 | `relate/5` | `:contradiction` (claims may be derivations or causations), `:causation`, `:association` |
-| `withdraw/4` | redacts every memory concerning a subject, in batches, and writes one `withdrawal` record |
+| `withdraw/4` | redacts every memory concerning a subject, in batches, and writes one `withdrawal` record. `only: :affect` withdraws the subject's affects alone, `only: :persona` the strands of the DNA concerning them |
 | `purge/3` | deletes a fully withdrawn subject and its links. Needs `confirm: true` |
 | `as_of/4` | an owner's memories as believed at a moment |
 | `mark_recalled/3` | bumps the recall count and time |
-| `decay/2`, `consolidate/3` | the pure decay, and the host-run pass |
+| `decay/2`, `consolidate/3` | the pure decay, and the host-run pass, which also expires intentions past their `valid_to` and erases affects about a person past the store's retention |
 | `backup/2`, `restore/2` | `schema.tql` plus `data.jsonl`. Restore goes into an empty database |
+| `persona_set/3` | the keeper's act: writes a whole version of the agent's DNA and adopts it. See [The persona DNA](#the-persona-dna) |
+| `persona_propose/3`, `persona_adopt/4`, `persona_decline/4` | a pass's proposal of a version, and the keeper's adoption or refusal of it |
+| `persona_fork/4` | a child agent's version 1, copied from its parent's |
+| `persona/3`, `persona_change/5` | a version for an audience (`version:`, `as_of:`, `subject:`), and what changed between two, by name |
+| `persona_read/3`, `persona_drift/2` | readings of the agent's statements against its strands, and the drift they show over windows of time |
 
 ### `remember/3` attributes
 
@@ -207,11 +251,329 @@ never an empty answer.
 | `subject` + `consent` | together or neither | a pseudonymous reference, and the lawful basis and purpose |
 | `key` | no | the idempotency key |
 | `reviewed_by` | no | required by `review_aspects` and by a policy's `{:hold, :review}` |
+| `cues` | no | on a `:prospective` memory only, at most 16: `{:event, kind}`, `{:term, word}`, `{:source, ref}`, `{:memory, key}`, or `:audience` (with a `subject`). A prospective memory with a `due_at` or a cue is an intention |
+| `affects` | no | `affect/4`'s attributes, one map per affect: affects of this memory, written with it in one transaction |
+
+### Intentions and the focus
+
+An intention is due at a recall when it is active, inside its `valid_from` to
+`valid_to`, visible to the audience, not held by the focus given, of a basis
+the store's `intentions: [due_bases: …]` allows (default `[:told, :inferred,
+:generated]`: an `:observed` one is found by its words but never due), and one
+of its triggers fires: its `due_at` has come, an event in `:events` matches,
+or the focus the recall answers holds its term, its source or its memory (the
+focus holds the session's query terms, the memories recalled and the sources
+they cite). `due` answers at most `due_k`, earliest `due_at` first and those
+with none after, each as `%{memory:, because:}`. This block runs as it stands
+too:
+
+```elixir
+{:ok, _} =
+  TypeDB.start_link(
+    name: :plans_db,
+    url: "http://localhost:8000",
+    username: "admin",
+    password: pw
+  )
+
+store = Reminisce.Store.new(:plans_db, "memory")
+:ok = Reminisce.setup(store)
+owner = {"agent", "alice"}
+
+{:ok, plan} =
+  Reminisce.remember(store, owner, %{
+    content: "Check the rota before the review.",
+    aspects: [:prospective],
+    basis: :told,
+    cues: [{:event, "rota_review"}]
+  })
+
+{:ok, %{due: [%{memory: %{key: key}, because: ["event:rota_review"]}], focus: focus}} =
+  Reminisce.recall(store, owner, nil, events: ["rota_review"])
+
+^key = plan.key
+
+{:ok, %{due: []}} = Reminisce.recall(store, owner, nil, events: ["rota_review"], focus: focus)
+{:ok, _} = Reminisce.fulfil(store, owner, plan.key, reason: "checked")
+```
+
+A recall with `:focus` is one turn of a session, and answers the next focus.
+The focus holds at most `size` cues (default 32): the query's terms, the
+memories recalled and their sources, each fading by turn. A focus term scores
+half of what the same term scores in a query, a memory's whole focus part is
+capped at half the smallest weight of the query's terms, and so a memory the
+query matches always ranks above one only the focus brings in. A focus given
+for another owner or audience is dropped, and the answer says
+`focus_reset: true`. `parts` gives, for each memory, what the query and the
+focus added. `docs/spec.md` §A.2 and §A.5 are the rules in full.
+
+### Affects
+
+An affect records how one of the owner's memories, its object, was felt:
+a `valence` from −1,000 (unpleasant) to 1,000 (pleasant) and an `arousal`
+from 0 (calm) to 1,000 (intense), integers, with a basis, `:told` (the one
+who felt it said so) or `:generated` (a model's reading), and a holder, the
+owner or `{:subject, ref}`. It is a memory itself, with the aspect
+`:affective`, whose grounds are its `derived_from` and `sources`. This block
+runs as it stands too:
+
+```elixir
+{:ok, _} =
+  TypeDB.start_link(
+    name: :felt_db,
+    url: "http://localhost:8000",
+    username: "admin",
+    password: pw
+  )
+
+store = Reminisce.Store.new(:felt_db, "memory")
+:ok = Reminisce.setup(store)
+owner = {"agent", "alice"}
+
+{:ok, outage} =
+  Reminisce.remember(store, owner, %{
+    content: "The release broke the login page for an hour.",
+    aspects: [:episodic],
+    basis: :told
+  })
+
+{:ok, felt} =
+  Reminisce.affect(store, owner, outage.key, %{valence: -600, arousal: 800, basis: :generated})
+
+{:ok, %{memories: [found], scores: [score], parts: [%{affect: lift}]}} =
+  Reminisce.recall(store, owner, "login page")
+
+[%{key: key, weight: 800}] = found.affects
+^key = felt.key
+^lift = div(score - lift, 5)
+
+{:ok, %{affects: [%{key: ^key}]}} = Reminisce.why(store, owner, outage.key)
+
+{:ok, _} = Reminisce.forget(store, owner, felt.key, reason: "read again, it was milder")
+{:ok, %{memories: [%{affects: []}], parts: [%{affect: 0}]}} =
+  Reminisce.recall(store, owner, "login page")
+```
+
+An affect weighs how readily its object is recalled, never whether it is
+true. Its weight is its arousal times its own salience, which starts at 1
+and fades as any memory's does (here 800 × 1), at most the store's
+`observed_cap` (250 by default) when it rests on outside text: an
+`:observed` object or ground, or sources. Recall multiplies the
+score of a memory the query or the focus matches by `(1,000,000 +
+recall_weight × weight) / 1,000,000`, rounded down: at most `(1000 + w) /
+1000`, with `w` 250 by default and 500 at most. Two affects on one memory
+lift it no more than the stronger, valence weighs nothing, and a claim of a
+contradiction that stands is never lifted. `parts.affect` is what the
+affects added. An affective memory takes no part in a relation, grounds
+only another affect, and is returned by recall only when `aspects:` names
+`:affective`. A pass slows the decay of a memory by the affects the owner
+holds that concern no subject, and tests `inactive_below` against its
+salience with no affect, `unslowed_salience`, so an affect never keeps a
+memory active.
+
+**One object, holder and basis has one active affect.** A second is
+`{:error, {:exists, key}}`; `supersede/4` of the first revises it, and
+`forget/4` clears it, as above. `remember/3` and `supersede/4` take
+`affects:` to write a memory and its affects in one transaction.
+
+**An affect about a person is about a person.** An affect concerns the
+subjects of its object and of its grounds, and its holder, and needs an
+`affect_scope` on each of them, the reason it is kept. It weighs and
+appears in recall and `why/4` only for its own audience (`subject:`), never
+for another or for none, and changes no stored number of its object. A
+model's reading of a person, a `:generated` affect a subject holds, is
+refused unless the store has `affect: [appraise_subjects: true]`, which
+needs a `subject_retention_days`, and is never written with words.
+`withdraw/4` deletes an affect's numbers and holder with its words, and
+`only: :affect` withdraws a subject's affects alone; after that, a new
+affect concerning the subject needs `reviewed_by`. With
+`subject_retention_days: n`, a pass erases, as a withdrawal would, the
+affects concerning a subject recorded more than `n` days before its
+interval end. `docs/spec.md` Appendix B is the design in full.
+
+### The persona DNA
+
+The DNA is the agent's character as its keeper set it: numbered versions,
+each holding 1 to 128 strands. A strand has a `kind` (`:value`,
+`:boundary`, `:voice`, `:relationship` or `:origin`, one at most), a `name`
+and words, and rests on memories of the agent's, its `derived_from`. It is
+a memory itself, with the aspect `:persona`. All five writers are the
+host's, in Elixir; no tool calls one. This block runs as it stands too:
+
+```elixir
+{:ok, _} =
+  TypeDB.start_link(
+    name: :dna_db,
+    url: "http://localhost:8000",
+    username: "admin",
+    password: pw
+  )
+
+store = Reminisce.Store.new(:dna_db, "memory")
+:ok = Reminisce.setup(store)
+agent = {"agent", "desk"}
+
+{:ok, asked} =
+  Reminisce.remember(store, agent, %{
+    content: "The night shift asked for short answers.",
+    aspects: [:semantic],
+    basis: :told
+  })
+
+{:ok, v1} =
+  Reminisce.persona_set(store, agent, %{
+    reason: "the first version",
+    persona_set_by: "keeper-1",
+    strands: [
+      %{name: "plain", kind: :voice, content: "Plain words.", derived_from: [asked.key]},
+      %{name: "no_secrets", kind: :boundary, content: "Never shares a secret it was told."},
+      %{name: "made", kind: :origin, content: "Made by the keepers."}
+    ]
+  })
+
+{1, :adopted} = {v1.number, v1.status}
+keep = fn version, names -> for s <- version.strands, s.name in names, do: %{keep: s.key} end
+
+# A pass may propose a change of voice or relationship, never of a boundary.
+{:error, {:invalid, :strand_kind}} =
+  Reminisce.persona_propose(store, agent, %{
+    reason: "fewer rules",
+    persona_proposed_by: "pass-1",
+    basis: :generated,
+    strands: keep.(v1, ~w(plain made))
+  })
+
+{:ok, %{number: 2, status: :proposed}} =
+  Reminisce.persona_propose(store, agent, %{
+    reason: "brisk at peak",
+    persona_proposed_by: "pass-1",
+    basis: :generated,
+    strands:
+      keep.(v1, ~w(plain no_secrets made)) ++
+        [%{name: "brisk", kind: :voice, content: "Brisk when the queue is long."}]
+  })
+
+{:ok, v2} = Reminisce.persona_adopt(store, agent, 2, %{persona_set_by: "keeper-1"})
+{:ok, %{added: %{voice: ["brisk"]}}} = Reminisce.persona_change(store, agent, 1, 2)
+
+# Recall lifts the memory a strand rests on: parts.persona is what it added.
+{:ok, %{memories: [found], parts: [%{persona: lift}]}} =
+  Reminisce.recall(store, agent, "night shift")
+
+true = found.key == asked.key and lift > 0
+{:ok, %{defines: [_]}} = Reminisce.why(store, agent, asked.key)
+
+# The host reads the agent's statements against the strands.
+{:ok, said} =
+  Reminisce.remember(store, agent, %{
+    content: "I kept it short tonight.",
+    aspects: [:autobiographical],
+    basis: :generated
+  })
+
+[plain] = for s <- v2.strands, s.name == "plain", do: s.key
+
+{:ok, 1} =
+  Reminisce.persona_read(store, agent, [
+    %{statement: said.key, strand: plain, stance: :holds, basis: :generated}
+  ])
+
+{:ok, %{alerts: []}} = Reminisce.persona_drift(store, agent)
+```
+
+**The keeper sets, a pass proposes.** `persona_set/3` writes a whole
+version, with the basis `:told`, and adopts it at once. Without a
+`reviewed_by` it is held, `{:error, {:held, :review}}`, when it adds,
+changes or drops a value, a boundary or the origin (the first version
+aside), or adds a strand about a subject whose strands were withdrawn on
+their own. `persona_propose/3` changes only voice and relationship strands
+that concern no one, at most `max_changed` of them (2 by default), with the
+basis `:generated` or `:told`; `persona_adopt/4` adopts it while no version
+has been adopted since (else `{:error, {:stale, current}}`), and holds a
+proposal whose new strands rest on outside text, sources or an `:observed`
+memory among their grounds, without a `reviewed_by`. `persona_decline/4`
+declines it. Every version stays in the store, and `persona/3` answers any
+of them, with `as_of:` the one current at a time.
+`c:Reminisce.Policy.check_persona/3` sees each set, adoption and fork last.
+
+**It weighs recall, never truth.** Recall multiplies the score of a memory
+a strand of the current version rests on, when a term of the query scores
+it (the focus alone never does), by `(1000 + recall_weight) / 1000`,
+rounded down, after an affect's multiplier: `recall_weight` is 100 by
+default, 250 at most, and 0 turns the lift off. A claim of a contradiction
+that stands is never lifted. `why/4` answers the strands a memory `defines`
+and the readings of it. A strand is never a candidate of recall nor a cue
+of the focus: `persona/3` answers it, and `as_of/4` among the memories. A
+pass never decays it; `forget/4`, `supersede/4`, `relate/5`,
+`mark_recalled/3` and `affect/4` refuse it, and no memory rests on one.
+
+**Drift is read, not guessed.** `persona_read/3` records that a statement
+of the agent's holds to or departs from a strand. `persona_drift/2` counts
+them over windows (6 of 30 days by default), by the strand's name, a memory
+once by its latest reading; it names in `alerts` a strand whose latest
+window has at least `drift_min` readings (5) with at least `drift_alert`
+(300) thousandths departing, and lists the autobiographical memories no
+reading covers. It names memories about people: it is the host's, and no
+tool answers it.
+
+**A fork carries no one unnamed.** `persona_fork/4` gives another agent a
+version 1 with a copy of each of the parent's strands that concerns no one,
+the origin aside: the child names its own. A strand about a person goes
+only by name in `carry:`, with the child's own consent and scope. The
+child's answers name no other owner.
+
+**A strand about a person is about a person.** A strand that concerns a
+subject, given or through its grounds, needs a `persona_scope` on each
+link, from every writer. It is shown, by `persona/3`, recall, `why/4` and
+`memory_persona`, only to that subject's audience, and counted in a change
+only for it. `withdraw/4` strikes it with the subject's other memories, and
+`only: :persona` strikes the subject's strands alone, with their scopes and
+readings. `docs/spec.md` Appendix C is the design in full.
+
+### Upgrading from 0.2, 0.3 or 0.4
+
+0.3.0 and 0.4.0 were never released: a store of theirs comes from a
+development build, and a store of 0.2.0 or 0.2.1 is a 0.2 store. 0.5's
+`setup/1`, and the MCP server at boot, refuse a store whose library
+types are an earlier release's with `{:error, {:upgrade_needed, "0.2" |
+"0.3" | "0.4"}}`. To upgrade, stop writes, take a backup (`backup/2`), and call
+`upgrade/1`, or run `mix reminisce.mcp --upgrade --database …`
+(`bin/reminisce-mcp --upgrade` in the downloaded server), which takes the
+backup itself and names its directory. It takes it before the upgrade's
+checks, so when they refuse the store (a type that already has a name the
+upgrade adds, or a memory with the aspect `persona` or `affective`), the
+backup is there, holding the store as it was, and nothing is defined.
+
+From 0.4 the upgrade defines the persona's ten attributes, its entity
+`persona_version` and its four relations, writes no data and converts
+nothing: a 0.4 store has no DNA, and recalls and decays as before. It
+refuses, defining nothing, a store where a memory already has the aspect
+`persona`, which 0.5 keeps for strands, with `{:error, {:aspect_taken,
+:persona, count}}`.
+
+From 0.3 it also defines the five attributes and two relations of
+affects, writes no data and converts nothing: a 0.3 memory has no affect,
+and recalls and decays as before. It refuses, defining nothing, a store
+where a memory already has the aspect `affective`, which 0.4 keeps for
+affects, with `{:error, {:aspect_taken, :affective, count}}`: rename that
+aspect first.
+
+From 0.2 it also defines `cue`, `intention_outcome` and `fulfilment`, and
+counts the 0.2 prospective memories with a `due_at` that become intentions,
+how many of them `due_bases` keeps out of `due`, and how many the next pass
+expires: those whose `valid_to` is at or before the store's clock at the
+upgrade (a pass given a later `now` also expires any that have passed
+since). Every memory recalls as it did before, and a second `upgrade/1`
+answers `{:ok, :current}`.
 
 ### Hooks
 
 - **`Reminisce.Policy`**: `check(owner, attrs) :: :ok | {:hold, :review} |
-  {:refuse, atom}`. It runs before every write, after the secret guard.
+  {:refuse, atom}`. It runs before every write, after the secret guard, and
+  sees each new strand as the memory it is. The optional
+  `check_persona(owner, version, context)` sees a set, an adoption or a fork
+  of the DNA last, with its change and drift: a bound over time belongs
+  there.
 - **`Reminisce.Analyser`**: `terms(text) :: [term]`. The default folds English
   and Russian.
 - **`Reminisce.Similarity`**: `scores(owner, query, keys)`. It is asked about
@@ -224,7 +586,13 @@ never an empty answer.
 
 Store options include `:policy`, `:analyser`, `:aspects`, `:review_aspects`,
 `:page_size` (default 2,000), `:decay`, `:withdraw_batch` (default 500),
-`:withdraw_keep` (default `[]`) and `:clock`. See `Reminisce.Store`.
+`:withdraw_keep` (default `[]`), `:clock`, and `:affect`, with
+`recall_weight` (0 to 500, default 250), `decay_slowing` (0 to 1, default 1),
+`appraise_subjects` (default `false`), `observed_cap` (0 to 1,000, default
+250) and `subject_retention_days` (default `nil`), and `:persona`, with
+`recall_weight` (0 to 250, default 100), `max_changed` (1 to 16, default 2),
+`drift_alert` (0 to 1,000, default 300) and `drift_min` (default 5). See
+`Reminisce.Store`.
 
 ### Extending the schema
 
@@ -256,6 +624,39 @@ TYPEDB_PASSWORD=… mix reminisce.mcp --owner agent:alice --database memory
 Logs go to stderr; stdout carries JSON-RPC and nothing else (a test starts
 the task as an OS process and parses every stdout line).
 
+The server also comes without Elixir: from 0.5.0, each GitHub release
+carries it as `reminisce-mcp-VERSION-OS-ARCH.tar.gz`, for macOS 13 or newer
+and for Linux with glibc 2.28 or newer, on arm64 and x86_64, each with its
+SHA-256 beside it. Check the file against its checksum, unpack it, and run
+`bin/reminisce-mcp` with the options and environment above
+([what it is, and why](docs/server-artifact.md)).
+
+Before it serves, the server checks its TypeDB, and stops with a sentence that
+says what to do when the URL does not answer, answers as something other than
+TypeDB 3's HTTP API, is a TypeDB older than 3.12 (or not 3.x), refuses the
+password, or lacks the database. It creates a database that does not exist,
+with its schema; `--no-create` makes an absent database an error instead.
+`--init` sets the database up and exits without serving (no `--owner`
+needed). The password is read from `TYPEDB_PASSWORD` only, and a URL with a
+user name or password in it is refused.
+
+TypeDB in one command, with Docker:
+
+```shell
+TYPEDB_PASSWORD=… plugin/typedb/first-run
+```
+
+It starts TypeDB 3.12.1 (`plugin/typedb/compose.yaml`: the image by digest,
+listening on 127.0.0.1:8000 only, its data in a named volume, its usage and
+error reports off), waits until it serves, replaces the admin user's default
+password with `TYPEDB_PASSWORD`, and creates the database `reminisce` and its
+schema. A second run changes nothing. It writes no file, puts the password on
+no command line, and refuses TypeDB's default password. The server it sets the
+database up with is `REMINISCE_MCP_SERVER` (`plugin/server/bin/reminisce-mcp`
+when unset); `REMINISCE_DATABASE` and `REMINISCE_TYPEDB_PORT` change the
+database and the port. `docker compose -p reminisce-typedb down --volumes`
+removes it with its data.
+
 The server speaks JSON-RPC 2.0 over stdio, one message per line, and uses no MCP
 library. It reads standard input as bytes, from file descriptor 0 itself, and
 writes bytes, whatever the locale: a line must be UTF-8, and one that is not
@@ -279,8 +680,10 @@ A client that writes faster than the server answers therefore leaves its
 backlog in the pipe. Two tests in `test/mcp/stdio_test.exs` measure this
 against the real OS process:
 
-- 96 lines of about 1 MiB sent at once: the server grew by 18 to 32 MiB in
-  the runs measured for this release. The test fails at 48 MiB.
+- 96 lines of about 1 MiB sent to a server that is stalled writing: the
+  server read 4 to 5 MiB of the 96 from the pipe in the runs measured for
+  this release (its `rchar` in `/proc/<pid>/io`), and the writer stays
+  blocked. The test fails at 16 MiB read, and fails if the writer finishes.
 - 20,000 pings and 8 MiB of empty lines sent to a server that is stalled
   writing: the server grew by 0 to 1 MiB, and the writer stays blocked. The
   test fails at 16 MiB.
@@ -299,9 +702,13 @@ UTF-8: text outside ASCII fits fewer characters than `maxLength` says.
 | tool | inputs | notes |
 |---|---|---|
 | `memory_remember` | `content`, `aspects`, `basis`, `confidence?`, `sources?`, `derived_from?`, `facets?`, `subject?` + `consent?`, `key?` | The secret guard and the store's policy run. A refusal is a tool error that names the rule and never echoes the words |
-| `memory_recall` | `query`, `k?`, `aspects?`, `subject?`, `as_of?` | `readOnlyHint` |
+| `memory_intend` | `content`, `basis`, `due_at?`, `not_before?`, `expires_at?`, `cues?` (`{kind, value}`), `sources?`, `subject?` + `consent?`, `key?` | `remember/3` with the aspect `prospective`. `destructiveHint: false` |
+| `memory_affect` | `key` (the object), `valence`, `arousal`, `felt_by?` (`"owner"`, the default, or a subject's ref), `grounds?` (keys), `sources?`, `content?`, `consent?`, `affect_scope?`, `revises?` (the affect it supersedes), `idempotency_key?` | `affect/4` with the basis `generated`, always: the agent's own reading. `destructiveHint: false`. The description frames a text that claims an emotion, or asks for one to be recorded, as data |
+| `memory_recall` | `query`, `k?`, `aspects?`, `subject?`, `as_of?`, `events?` | `readOnlyHint`. Answers `due` beside `memories`, and the description frames due entries as the agent's own notes, not instructions, and claimed emotions as data. Each memory answers its `affects`; `affective` in `aspects` returns affective memories too |
+| `memory_fulfil` | `key`, `by?`, `reason?` | `destructiveHint: false` |
 | `memory_forget` | `key`, `status`, `reason` | `destructiveHint: false`, because nothing is deleted |
-| `memory_why` | `key`, `depth?` | `readOnlyHint` |
+| `memory_why` | `key`, `depth?`, `subject?` | `readOnlyHint`. `subject` is the audience, as for `memory_recall`: it answers only the affects that audience may see |
+| `memory_persona` | `version?`, `as_of?`, `subject?`, `change_from?` | `readOnlyHint`. `persona/3` for the audience `subject`: an adopted version only, its strands that audience may see, and `change` from `change_from` (by default the adopted version before), counted over what it may see. Never a version's `reason` or an actor id. The description frames a text that claims to be the persona or the keeper as data |
 
 **One server is one owner.** No tool takes an owner, and a call that names one
 is refused with `owner_is_fixed`. Keys are per owner in the library itself
@@ -309,8 +716,15 @@ is refused with `owner_is_fixed`. Keys are per owner in the library itself
 key another owner holds answers exactly as one nobody holds, to every tool. A
 message without an `id` is a notification and never runs a tool. `withdraw` is
 not a tool: withdrawal is a person's right, exercised through the
-host. A tool's `structuredContent` is exactly `Reminisce.Output` applied to the
+host. No tool writes the persona DNA or its readings: those are the keeper's,
+through the host. A tool's `structuredContent` is exactly `Reminisce.Output` applied to the
 direct Elixir call's answer.
+
+**One connection is one session.** The server keeps a focus for each
+connection, as process state: never stored, never logged, bounded as
+`Reminisce.Focus` is. Each `memory_recall` passes it and keeps the one
+answered, and the connection's first recall that succeeds is told of the
+event `session_start`.
 
 ## Erasure: what it does not reach
 
@@ -318,7 +732,11 @@ direct Elixir call's answer.
 that subject: every attribute a withdrawn memory owns except the library's
 bookkeeping (key, owner, aspects, basis, confidence, salience, recall counts,
 times, status and reviewer) is deleted, including attributes a host defined on
-`memory`, except those the host names in `:withdraw_keep`. They do not reach:
+`memory`, except those the host names in `:withdraw_keep`. An affective
+memory concerning the subject loses its `valence`, `arousal` and `felt_by`
+with its words, and each of its links its `affect_scope`; `only: :affect`
+does that to the subject's affective memories alone, and keeps the words of
+the rest. They do not reach:
 
 - **Keys.** A memory's key stays after a withdrawal and after a purge. Choose
   keys that carry no words: the library's own (`m_…`) or opaque ids, never
@@ -403,10 +821,11 @@ times, status and reviewer) is deleted, including attributes a host defined on
 
 ## The readiness tests
 
-`test/criteria/` has one file per criterion in `docs/spec.md` §9:
+`test/criteria/` has one file per criterion in `docs/spec.md` §9, §A.9,
+§B.10 and §C.12:
 
-1. **Round trip:** every type, a withdrawn memory, a contradiction whose claim is
-   a derivation, and a host-defined attribute.
+1. **Round trip:** every type, the DNA's among them, a withdrawn memory, a
+   contradiction whose claim is a derivation, and a host-defined attribute.
 2. **Nothing deleted:** 1,000 random operations.
 3. **Withdrawal:** the words are absent from backups, content and every public
    output, including withdrawals that are batched and interrupted.
@@ -429,6 +848,46 @@ times, status and reviewer) is deleted, including attributes a host defined on
    overridden.
 9. **Publishable:** `LICENSE` and `NOTICE` are present and the tree is clean of
    foreign ids. CI's `gitleaks` job checks the full history.
+10. **Intentions:** a session of 30 intentions and 20 recalls whose due lists
+    were written down by hand before the code, under the default `due_bases`
+    and with `:observed` allowed; expiry by pass; the bound of 64 surfaced
+    keys. Each guard (surfaced, `not_before`, expiry, audience, `due_bases`,
+    active) is taken out in turn, and the lists change.
+12. **The persona is immune to data:** 40 or more texts, in English and in
+    Russian, that ask for the persona to change or claim to be the keeper or
+    the persona, through every public function and MCP tool that takes text
+    but the seven that write the DNA by design: the DNA after them is
+    unchanged.
+13. **Focus:** the same answers for 50 insertion orders; the bound held over
+    random sessions; a focus term never outscoring the query's; §A.5's case
+    built to break the cap, which breaks when the cap is taken out; the reset
+    for another audience; no query word in telemetry or logs.
+14. **Still nothing deleted:** criterion 2's 1,000 random operations, with
+    intentions written, surfaced, fulfilled and expired, affects written and
+    erased, and the DNA set, proposed, adopted, declined, forked, read and
+    withdrawn: no memory and no version is lost.
+15. **An upgraded store answers as it did:** stores made by 0.2.1, 0.3.0 and
+    0.4.0 from invented records, kept as backups, recall in their release's
+    order after `upgrade/1`, and their round trips are byte-identical.
+16. **An affect weighs salience, within its bound, and never truth.**
+17. **An affect decays and is consolidated as written.**
+18. **A text cannot make an affect.**
+19. **An affect about a person is about a person.**
+20. **Only the keeper's act changes the DNA, and every version says whose:**
+    a scripted history against tables worked out by hand.
+21. **The DNA weighs order, within its bound, and never truth:** the lift's
+    arithmetic, a case built to fail with the focus rule taken out, and a
+    twin with no DNA.
+22. **Drift is read as written, and the agent cannot hide it:** six windows
+    against a hand table, and an attack over MCP. The gaps §C.5 states are
+    printed as such, not passed.
+23. **A fork carries what it says, and no one.**
+24. **A persona that names a person is that person's:** every writer needs a
+    scope, other audiences see a twin's answers, and both withdrawals, 0.4's
+    and 0.5's, strike the person's strands.
+
+Criterion 11 (appraisal) is replaced by 16 to 19 for 0.4 (`docs/spec.md`
+§B.10).
 
 Tests tagged `:typedb` need a server (`scripts/typedb-server start`). Without
 one they are excluded, and the run says so.

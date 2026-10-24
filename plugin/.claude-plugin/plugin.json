@@ -1,0 +1,65 @@
+{
+  "name": "noetic-reminisce",
+  "displayName": "reminisce",
+  "version": "0.5.0",
+  "description": "Memory that stays yours. Claude remembers what you ask it to keep, recalls it by its words, and answers why it remembers something from what was recorded at the time. Your memories go nowhere else than your own TypeDB. Setup downloads the server from GitHub and the TypeDB image from Docker Hub; it sends them nothing about you or your memories.",
+  "author": {
+    "name": "NoeticEcho",
+    "url": "https://github.com/NoeticEcho"
+  },
+  "homepage": "https://open.noeticecho.space/reminisce-elixir/docs/plugin/",
+  "repository": "https://github.com/NoeticEcho/reminisce-elixir",
+  "documentationUrl": "https://open.noeticecho.space/reminisce-elixir/docs/plugin/",
+  "supportUrl": "https://github.com/NoeticEcho/reminisce-elixir/issues",
+  "privacyPolicyUrl": "https://open.noeticecho.space/reminisce-elixir/docs/plugin/privacy.html",
+  "termsOfServiceUrl": "https://open.noeticecho.space/reminisce-elixir/docs/plugin/terms.html",
+  "license": "Apache-2.0",
+  "keywords": ["memory", "typedb", "mcp", "provenance", "recall"],
+  "classification": {
+    "object_acted_on": ["ai-models-agents"],
+    "work_department": "engineering",
+    "industry": "software-saas",
+    "subject": "computing"
+  },
+  "icon": "./.claude-plugin/icon.svg",
+  "userConfig": {
+    "owner": {
+      "type": "string",
+      "title": "Owner",
+      "description": "Whose memory this is, written kind:key, such as user:alice or project:website. The server serves this one owner; change it to switch memories.",
+      "required": true
+    },
+    "database": {
+      "type": "string",
+      "title": "Database",
+      "description": "The TypeDB database the memories are kept in. A database is not a wall: every database on one TypeDB opens with the same admin password. People who must not read each other's memories need separate TypeDB servers, each with its own password.",
+      "required": true,
+      "default": "reminisce"
+    },
+    "typedb_url": {
+      "type": "string",
+      "title": "TypeDB URL",
+      "description": "The HTTP address of your TypeDB 3.12 or later, with no user name or password in it. The setup step's TypeDB listens on http://127.0.0.1:8000.",
+      "required": true,
+      "default": "http://127.0.0.1:8000"
+    },
+    "typedb_password": {
+      "type": "string",
+      "title": "TypeDB password",
+      "description": "The password of TypeDB's admin user: the one you gave the setup step, or your own TypeDB's. Kept in your system's secure storage, and passed to the server only.",
+      "required": true,
+      "sensitive": true
+    }
+  },
+  "mcpServers": {
+    "reminisce": {
+      "command": "${CLAUDE_PLUGIN_ROOT}/bin/reminisce-mcp",
+      "args": ["--owner", "${user_config.owner}", "--database", "${user_config.database}"],
+      "env": {
+        "TYPEDB_URL": "${user_config.typedb_url}",
+        "TYPEDB_USERNAME": "admin",
+        "TYPEDB_PASSWORD": "${user_config.typedb_password}"
+      }
+    }
+  }
+}

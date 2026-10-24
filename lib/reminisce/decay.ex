@@ -14,15 +14,27 @@ defmodule Reminisce.Decay do
   interval end, and `τ` is the longest of its aspects' time constants: a memory
   that is semantic as well as episodic fades at the semantic pace.
 
+  An affect slows it (docs/spec.md §B.4): a memory with an active affective
+  memory the owner holds that concerns no subject decays with the time
+  constant `τ × (1 + s × weight / 1000)`, where `weight` is the largest such
+  affect's (`arousal × floor(salience × 1000) div 1000`, at most the store's
+  `observed_cap` for one resting on outside text) and `s` is the store's
+  `affect: [decay_slowing:]`. The first pass that slows a memory also writes
+  its `unslowed_salience`, the salience it would have with no affect, and
+  decays it at `τ` from then on; `:inactive_below` is tested on that number.
+  An affective memory decays at its own `τ` (`:affective`, default 90 days)
+  and is slowed by nothing.
+
   Configuration, on the store as `decay: [...]`:
 
     * `:tau_days` — `%{aspect => days}`; default
-      `%{episodic: 30, semantic: 365, procedural: 365, autobiographical: 730, prospective: 90}`;
+      `%{episodic: 30, semantic: 365, procedural: 365, autobiographical: 730, prospective: 90,
+      affective: 90}`;
     * `:default_tau_days` — for an aspect missing from the map; default 90;
     * `:floor` — default 0.05;
     * `:inactive_below` — when set, a pass moves an active memory whose decayed
-      salience falls below it to `:inactive`, reason `"decayed"`. Default `nil`
-      (off).
+      salience falls below it to `:inactive`, reason `"decayed"`: its
+      `unslowed_salience` once an affect has slowed it. Default `nil` (off).
 
   Nothing here schedules anything: the host calls `Reminisce.consolidate/3`.
   """
@@ -34,14 +46,18 @@ defmodule Reminisce.Decay do
     semantic: 365,
     procedural: 365,
     autobiographical: 730,
-    prospective: 90
+    prospective: 90,
+    affective: 90
   }
 
   @doc """
   The pure decay function: the salience `memory` would have at `opts[:at]`.
 
   Options: `:at` (required), `:since` (default: the later of `last_recalled_at`
-  and `recorded_at`), and the configuration keys above.
+  and `recorded_at`), the configuration keys above, and `:affect_weight`
+  (default 0) with `:decay_slowing` (default 1): the time constant becomes
+  `τ × (1 + decay_slowing × affect_weight / 1000)`. `decay(m, at: t)` is the
+  decay with no affect; a pass gives the weight.
   """
   @spec decay(Memory.t(), keyword()) :: float()
   def decay(%Memory{} = m, opts) do
@@ -49,10 +65,17 @@ defmodule Reminisce.Decay do
     since = opts[:since] || latest([m.last_recalled_at, m.recorded_at])
     floor = Keyword.get(opts, :floor, 0.05)
     days = max(DateTime.diff(at, since, :microsecond), 0) / 86_400_000_000
-    tau = tau(m.aspects, opts)
+    tau = m.aspects |> tau(opts) |> slowed(opts)
     s = m.salience || 0.5
 
     if s <= floor, do: s, else: floor + (s - floor) * :math.exp(-days / tau)
+  end
+
+  defp slowed(tau, opts) do
+    case Keyword.get(opts, :affect_weight, 0) do
+      w when w == 0 -> tau
+      w -> tau * (1 + Keyword.get(opts, :decay_slowing, 1) * w / 1000)
+    end
   end
 
   defp tau(aspects, opts) do
@@ -64,24 +87,43 @@ defmodule Reminisce.Decay do
   defp latest(times), do: times |> Enum.reject(&is_nil/1) |> Enum.max(DateTime, fn -> nil end)
 
   @doc false
+  # One pass, in its one write transaction, in this order (docs/spec.md
+  # §B.4): the affects past their retention are erased; every active memory
+  # that remains decays, slowed by the affects that remain; each whose
+  # unslowed number fell below `inactive_below` goes inactive; intentions
+  # expire.
   def consolidate(%Store{} = store, owner, interval_end) do
     with {:ok, {kind, okey} = owner} <- Write.owner(owner),
          {:ok, %DateTime{} = at} <- Reminisce.Attrs.time(:interval_end, interval_end),
          pass_key = pass_key(owner, at),
          {:ok, previous} <- previous_pass(store, owner),
          :ok <- after_previous(previous, at),
-         opts = Keyword.put(store.decay, :at, at),
-         {:ok, updates} <- decayed(store, owner, at, previous, opts) do
+         opts =
+           store.decay
+           |> Keyword.put(:at, at)
+           |> Keyword.put(:decay_slowing, Store.affect(store, :decay_slowing)),
+         {:ok, walked} <- walked(store, owner, at, previous, opts),
+         {:ok, weights} <- slowing(store, owner, walked) do
       inactive_below = store.decay[:inactive_below]
-
-      fading = if inactive_below, do: for({k, s} <- updates, s < inactive_below, do: k), else: []
       now = Store.now(store)
 
       DB.write(store, fn q ->
-        with {:ok, _} <- pass(q, pass_key, kind, okey, at, length(updates), now),
-             {:ok, _} <- salience(q, owner, updates),
-             {:ok, _} <- deactivate(q, owner, fading, now) do
-          {:ok, %{pass: pass_key, updated: length(updates), inactivated: length(fading)}}
+        with {:ok, erased} <- erase(q, store, owner, at, now),
+             updates = updates(walked, weights, erased, opts),
+             fading = fading(updates, inactive_below),
+             {:ok, _} <- pass(q, pass_key, kind, okey, at, length(updates), now),
+             {:ok, _} <- salience(q, owner, Enum.map(updates, fn {k, s, _u} -> {k, s} end)),
+             {:ok, _} <- unslowed(q, owner, for({k, _s, u} <- updates, u != nil, do: {k, u})),
+             {:ok, _} <- deactivate(q, owner, fading, now),
+             {:ok, expired} <- expire(q, owner, at, now) do
+          {:ok,
+           %{
+             pass: pass_key,
+             updated: length(updates),
+             inactivated: length(fading),
+             expired: expired,
+             erased: length(erased)
+           }}
         end
       end)
       |> case do
@@ -94,22 +136,124 @@ defmodule Reminisce.Decay do
     end
   end
 
-  # One page of memories at a time: what is kept is a stored key and a number
-  # for each active memory, never the memories themselves.
-  defp decayed(store, owner, at, previous, opts) do
+  # One page of memories at a time: what is kept for each active memory is its
+  # stored key and the few numbers its decay needs, never the memory itself;
+  # for an affective one, its arousal and holder too, and the salience this
+  # pass writes for it.
+  defp walked(store, owner, at, previous, opts) do
     Read.each_page(store, owner, [as_of: at, scope: :all], [], fn page, acc ->
-      updates =
-        for doc <- page, doc["status"] == "active" do
-          m = Memory.from_doc(doc)
+      # A strand of the DNA is neither decayed nor retired by a pass
+      # (docs/spec.md §C.2).
+      found =
+        for doc <- page,
+            doc["status"] == "active",
+            m = Memory.from_doc(doc),
+            :persona not in m.aspects do
           since = latest([m.last_recalled_at, m.recorded_at, previous])
-          {doc["memory_key"], decay(m, Keyword.put(opts, :since, since))}
+          lite = %Memory{aspects: m.aspects, salience: m.salience}
+
+          affect =
+            if :affective in m.aspects,
+              do: %{
+                arousal: m.arousal,
+                felt_by: m.felt_by,
+                salience: decay(lite, since(opts, since))
+              }
+
+          %{
+            key: doc["memory_key"],
+            memory: lite,
+            unslowed: m.unslowed_salience,
+            since: since,
+            affect: affect
+          }
         end
 
-      {:cont, Enum.reverse(updates, acc)}
+      {:cont, Enum.reverse(found, acc)}
     end)
     |> case do
-      {:ok, updates} -> {:ok, Enum.reverse(updates)}
+      {:ok, found} -> {:ok, Enum.reverse(found)}
       error -> error
+    end
+  end
+
+  defp since(opts, since), do: Keyword.put(opts, :since, since)
+
+  # The slowing weight of each memory, by its stored key: the largest weight
+  # among its active affects the owner holds that concern no subject, each
+  # from the salience this pass writes for it. So it does not depend on the
+  # order of the walk.
+  defp slowing(store, owner, walked) do
+    affects = for %{affect: %{felt_by: :owner}} = w <- walked, do: w
+
+    if affects == [] do
+      {:ok, %{}}
+    else
+      with {:ok, index} <- Reminisce.Affect.index(store, owner) do
+        {:ok,
+         for %{key: key, affect: a} <- affects,
+             entry = index[key],
+             entry != nil and not entry.scoped,
+             weight = Reminisce.Affect.weight(store, a.arousal, a.salience, entry.outside),
+             reduce: %{} do
+           acc -> Map.update(acc, entry.object, weight, &max(&1, weight))
+         end}
+      end
+    end
+  end
+
+  # `{key, salience, unslowed_salience | nil}` for each memory that remains.
+  defp updates(walked, weights, erased, opts) do
+    erased = MapSet.new(erased)
+
+    for %{key: key} = w <- walked, not MapSet.member?(erased, key) do
+      weight = Map.get(weights, key, 0)
+      opts = since(opts, w.since)
+      salience = decay(w.memory, Keyword.put(opts, :affect_weight, weight))
+
+      unslowed =
+        cond do
+          weight > 0 -> decay(%{w.memory | salience: w.unslowed || w.memory.salience}, opts)
+          w.unslowed != nil -> decay(%{w.memory | salience: w.unslowed}, opts)
+          true -> nil
+        end
+
+      {key, salience, unslowed}
+    end
+  end
+
+  defp fading(_updates, nil), do: []
+  defp fading(updates, below), do: for({k, s, u} <- updates, (u || s) < below, do: k)
+
+  # Erasure at retention (docs/spec.md §B.6): every affective memory of the
+  # owner's concerning a subject, whatever its status but `withdrawn`,
+  # recorded more than `subject_retention_days` before the interval end. It
+  # is withdrawn, with the reason "retention", and no withdrawal is recorded.
+  defp erase(q, store, {kind, okey}, at, now) do
+    case Store.affect(store, :subject_retention_days) do
+      nil ->
+        {:ok, []}
+
+      days ->
+        before = DateTime.add(at, -days * 86_400, :second)
+
+        query = """
+        given $ok: string, $okey: string, $before: datetime-tz;
+        match $m isa memory, has owner_kind == $ok, has owner_key == $okey, has memory_key $k,
+          has aspect "affective", has recorded_at $r; $r < $before;
+          (memory: $m) isa concerning;
+          not { $m has status "withdrawn"; };
+        select $k;
+        """
+
+        with {:ok, rows} <-
+               q.(query, [%{"ok" => kind, "okey" => okey, "before" => before}]) |> DB.rows() do
+          keys = rows |> Enum.map(&DB.value(&1, "k")) |> Enum.uniq() |> Enum.sort()
+
+          if keys == [],
+            do: {:ok, []},
+            else: with(:ok <- Reminisce.Withdrawal.erase(q, store, keys, now), do: {:ok, keys})
+        end
     end
   end
 
@@ -175,6 +319,18 @@ defmodule Reminisce.Decay do
     """)
   end
 
+  defp unslowed(_q, _owner, []), do: {:ok, nil}
+
+  defp unslowed(q, owner, updates) do
+    rows = Enum.map(updates, fn {k, u} -> Write.owned_row(owner, %{"k" => k, "u" => u}) end)
+
+    batched(q, rows, """
+    given $k: string, $u: double, #{Write.owner_given()};
+    match #{Write.owned("$m", "$k")};
+    update $m has unslowed_salience == $u;
+    """)
+  end
+
   @doc false
   def deactivate(q, owner, keys, now) do
     rows = Enum.map(keys, &Write.owned_row(owner, %{"k" => &1, "now" => now}))
@@ -184,6 +340,35 @@ defmodule Reminisce.Decay do
     match #{Write.owned("$m", "$k")}, has status "active";
     update $m has status "inactive", has status_changed_at == $now, has status_reason "decayed";
     """)
+  end
+
+  # Expiry (docs/spec.md §A.2): every active intention of the owner's whose
+  # `valid_to` is at or before the interval end is archived, with the outcome
+  # and the reason "expired", in the pass's transaction. The decay walk above
+  # reads what was valid at the interval end, so it never sees these.
+  @expiring """
+  given $e: datetime-tz, #{Write.owner_given()};
+  match $m isa memory, has owner_kind == $ok, has owner_key == $okey, has memory_key $k,
+    has status "active", has aspect "prospective", has valid_to $vt; $vt <= $e;
+    { $m has due_at $d; } or { $m has cue $c; };
+  select $k;
+  """
+
+  defp expire(q, owner, at, now) do
+    with {:ok, rows} <- q.(@expiring, [Write.owned_row(owner, %{"e" => at})]) |> DB.rows() do
+      keys = rows |> Enum.map(&DB.value(&1, "k")) |> Enum.uniq() |> Enum.sort()
+      rows = Enum.map(keys, &Write.owned_row(owner, %{"k" => &1, "now" => now}))
+
+      with {:ok, _} <-
+             batched(q, rows, """
+             given $k: string, $now: datetime-tz, #{Write.owner_given()};
+             match #{Write.owned("$m", "$k")}, has status "active";
+             update $m has status "archived", has status_changed_at == $now,
+               has status_reason "expired", has intention_outcome "expired";
+             """) do
+        {:ok, length(keys)}
+      end
+    end
   end
 
   defp batched(q, rows, query) do

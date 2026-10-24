@@ -1,0 +1,40 @@
+#!/bin/sh
+# SPDX-FileCopyrightText: 2026 NoeticEcho and the reminisce contributors
+# SPDX-License-Identifier: Apache-2.0
+#
+# The reminisce MCP server on stdio. It takes the options and the environment
+# of `mix reminisce.mcp`:
+#
+#   TYPEDB_PASSWORD=... reminisce-mcp --owner agent:alice --database memory
+set -e
+
+# Follow links to this script, so that it can be linked from a directory on
+# PATH and still find the release beside it.
+self=$0
+while [ -h "$self" ]; do
+  link=$(ls -ld "$self" | sed 's/.* -> //')
+  case $link in
+    /*) self=$link ;;
+    *) self=$(dirname "$self")/$link ;;
+  esac
+done
+bin=$(cd "$(dirname "$self")" && pwd -P)
+
+# The VM is the release's own, whatever Erlang the user's environment sets up
+# for other programs: no flags, code or options from it.
+unset ERL_AFLAGS ERL_FLAGS ERL_ZFLAGS ERL_LIBS ELIXIR_ERL_OPTIONS
+# Nor the release's own variables from another release that started this one,
+# nor an OpenSSL configuration or provider directory of the user's.
+unset RELEASE_ROOT RELEASE_NODE RELEASE_COOKIE RELEASE_TMP RELEASE_VM_ARGS RELEASE_DISTRIBUTION RELEASE_SYS_CONFIG RELEASE_PROG RELEASE_VSN RELEASE_NAME RELEASE_MODE RELEASE_BOOT_SCRIPT RELEASE_COMMAND RELEASE_DISABLE_ISOLATION
+unset OPENSSL_CONF OPENSSL_MODULES
+# No core file either: it would hold the heap, with the TypeDB password.
+ulimit -c 0 2>/dev/null || true
+
+# stdout is the MCP stream, and only the server writes on it. The stream moves
+# to descriptor 3, where the server writes its replies
+# (REMINISCE_MCP_OUTPUT_FD), and descriptor 1 goes to stderr: whatever the VM
+# itself prints there, such as a report from before its logger is set up,
+# reaches stderr instead.
+export REMINISCE_MCP_OUTPUT_FD=3
+exec 3>&1 1>&2
+exec "$bin/reminisce" eval 'Reminisce.MCP.CLI.main(System.argv())' "$@"

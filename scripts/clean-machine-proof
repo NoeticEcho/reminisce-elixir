@@ -1,0 +1,226 @@
+#!/bin/sh
+# SPDX-FileCopyrightText: 2026 NoeticEcho and the reminisce contributors
+# SPDX-License-Identifier: Apache-2.0
+#
+# The plugin on a clean machine: in a fresh container with no Erlang and no
+# Elixir, installs the plugin's server with the plugin's own install script,
+# starts TypeDB with the plugin's first-run, and runs remember, recall and
+# why through the plugin's MCP server, started as the plugin's manifest
+# starts it. Then a second session recalls the same memory. Every step is
+# printed; the run fails at the first one that does not do what it should.
+#
+#   scripts/clean-machine-proof [--tarball FILE] [--image IMAGE]
+#
+#   --tarball FILE  the server tarball for this machine, with FILE.sha256
+#                   beside it, as scripts/build-server and the release make
+#                   them. Without it, the install script downloads the server
+#                   from the GitHub release of the plugin's version.
+#   --image IMAGE   the clean machine (default: Debian 13 slim, pinned by
+#                   digest, as the release workflow's bare test uses).
+#
+# Runs on a Linux host with Docker and its compose plugin. The container gets
+# the host's docker command and socket, so that first-run starts TypeDB on
+# the host as it would on a user's machine, and shares the host's network, so
+# that it reaches that TypeDB on 127.0.0.1. Nothing else of the host is in
+# it. The plugin is the one committed at HEAD.
+#
+# The TypeDB it starts is its own (compose project reminisce-proof, port
+# REMINISCE_PROOF_PORT, default 18000), and is removed with its data at the
+# end. Its password is made for the run, passed through the environment
+# only, and checked to be in none of the output.
+
+set -eu
+
+root=$(cd "$(dirname "$0")/.." && pwd -P)
+image=debian:13-slim@sha256:a29215f6a35e51e22adffa17f89e9d2ef06214e64a2bad10d765c46aea49f11f
+tarball=
+port=${REMINISCE_PROOF_PORT:-18000}
+project=reminisce-proof
+
+fail() {
+  printf 'clean-machine-proof: %s\n' "$*" >&2
+  exit 1
+}
+
+while [ $# -gt 0 ]; do
+  case $1 in
+  --tarball)
+    [ $# -ge 2 ] || fail "--tarball needs a file"
+    tarball=$2
+    shift 2
+    ;;
+  --image)
+    [ $# -ge 2 ] || fail "--image needs an image"
+    image=$2
+    shift 2
+    ;;
+  *) fail "unknown argument: $1" ;;
+  esac
+done
+
+[ "$(uname -s)" = Linux ] || fail "runs on Linux only: the container is given the host's docker command"
+command -v docker >/dev/null 2>&1 || fail "Docker is not installed"
+docker compose version >/dev/null 2>&1 || fail "Docker's compose plugin is not installed"
+
+docker_bin=$(command -v docker)
+compose_bin=
+for dir in "${DOCKER_CONFIG:-$HOME/.docker}/cli-plugins" /usr/local/lib/docker/cli-plugins \
+  /usr/local/libexec/docker/cli-plugins /usr/lib/docker/cli-plugins /usr/libexec/docker/cli-plugins; do
+  if [ -x "$dir/docker-compose" ]; then
+    compose_bin=$dir/docker-compose
+    break
+  fi
+done
+[ -n "$compose_bin" ] || fail "cannot find the docker-compose plugin's file"
+
+case ${DOCKER_HOST:-unix:///var/run/docker.sock} in
+unix://*) socket=${DOCKER_HOST:-unix:///var/run/docker.sock} socket=${socket#unix://} ;;
+*) fail "DOCKER_HOST is not a unix socket: $DOCKER_HOST" ;;
+esac
+
+stage=$(mktemp -d)
+cleanup() {
+  docker compose -p "$project" down --volumes >/dev/null 2>&1 || true
+  rm -rf "$stage"
+}
+trap cleanup EXIT
+trap 'exit 130' INT TERM
+
+# The plugin as it is committed: no server, nothing built.
+git -C "$root" archive HEAD plugin | tar -x -C "$stage"
+commit=$(git -C "$root" rev-parse HEAD)
+
+if [ -n "$tarball" ]; then
+  [ -f "$tarball" ] || fail "no tarball at $tarball"
+  [ -f "$tarball.sha256" ] || fail "no checksum at $tarball.sha256"
+  cp "$tarball" "$tarball.sha256" "$stage/"
+  tarball=$(basename "$tarball")
+fi
+
+TYPEDB_PASSWORD=$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')
+export TYPEDB_PASSWORD
+
+cat >"$stage/inside.sh" <<'INSIDE'
+set -eu
+
+step() { printf '\n== %s\n' "$*"; }
+fail() {
+  printf 'FAILED: %s\n' "$*"
+  exit 1
+}
+
+step "the machine"
+. /etc/os-release
+echo "system: $PRETTY_NAME, $(uname -m)"
+echo "C library: $(ldd --version 2>&1 | head -n 1)"
+for tool in erl erlc elixir mix iex; do
+  if command -v "$tool" >/dev/null 2>&1; then fail "$tool is installed: not a clean machine"; fi
+done
+[ ! -e /usr/lib/erlang ] && [ ! -e /usr/local/lib/erlang ] || fail "an Erlang is installed"
+echo "no Erlang and no Elixir: erl, erlc, elixir, mix and iex are not installed"
+
+step "what the plugin needs: curl, tar, gzip, sha256sum"
+if ! command -v curl >/dev/null 2>&1; then
+  echo "curl is not installed; installing it from the system's packages"
+  apt-get update -qq >/dev/null
+  apt-get install -y -qq --no-install-recommends curl ca-certificates >/dev/null
+fi
+for tool in curl tar gzip sha256sum; do
+  command -v "$tool" >/dev/null 2>&1 || fail "$tool is not installed"
+done
+echo "$(curl --version | head -n 1)"
+echo "Docker, the host's, through its socket: $(docker --version)"
+echo "$(docker compose version)"
+for tool in erl erlc elixir mix iex; do
+  if command -v "$tool" >/dev/null 2>&1; then fail "$tool came with the packages"; fi
+done
+echo "still no Erlang and no Elixir"
+
+step "the plugin, as installed: no server yet"
+cp -R /proof/plugin /root/plugin
+plugin=/root/plugin
+echo "plugin at $plugin, committed at $COMMIT"
+status=0
+"$plugin/bin/reminisce-mcp" --owner user:proof --database reminisce </dev/null >/tmp/out 2>/tmp/err || status=$?
+cat /tmp/err
+[ "$status" = 1 ] || fail "the launcher without a server exited $status, not 1"
+[ ! -s /tmp/out ] || fail "the launcher without a server wrote to stdout"
+echo "(the launcher exits 1 and says how to install the server)"
+
+step "install the server, as /noetic-reminisce:setup does"
+if [ -n "$TARBALL" ]; then
+  sh "$plugin/scripts/install-server" --file "/proof/$TARBALL" --sha256 "$(cut -d ' ' -f 1 "/proof/$TARBALL.sha256")"
+else
+  sh "$plugin/scripts/install-server"
+fi
+du -sh "$plugin/server" | sed 's/\t.*/ unpacked/'
+
+step "TypeDB, by the plugin's first-run"
+REMINISCE_TYPEDB_PORT=$PORT REMINISCE_TYPEDB_PROJECT=$PROJECT sh "$plugin/typedb/first-run"
+
+# The plugin's MCP server, as its manifest starts it: the launcher, with the
+# owner and database settings as arguments and TypeDB's in the environment.
+mcp() {
+  TYPEDB_URL=http://127.0.0.1:$PORT TYPEDB_USERNAME=admin \
+    "$plugin/bin/reminisce-mcp" --owner user:proof --database reminisce
+}
+
+session() {
+  printf '%s\n' "$@" >/tmp/in
+  status=0
+  mcp </tmp/in >/tmp/out 2>/tmp/err || status=$?
+  while IFS= read -r line; do printf -- '-> %s\n' "$line"; done </tmp/in
+  while IFS= read -r line; do printf -- '<- %s\n' "$line"; done </tmp/out
+  sed 's/^/stderr: /' /tmp/err
+  [ "$status" = 0 ] || fail "the server exited $status when its input ended"
+  if grep -v '"jsonrpc":"2.0"' /tmp/out | grep -q .; then fail "stdout holds something other than JSON-RPC"; fi
+  if grep -q '"isError":true' /tmp/out; then fail "a tool answered with an error"; fi
+  if grep -qF "$TYPEDB_PASSWORD" /tmp/out /tmp/err; then fail "the password is in the server's output"; fi
+}
+
+# The answer to request id $1.
+reply() { grep "\"id\":$1[,}]" /tmp/out || fail "no answer to request $1"; }
+
+init='{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"clean-machine-proof","version":"1"}}}'
+initialized='{"jsonrpc":"2.0","method":"notifications/initialized"}'
+
+step "session 1: remember, recall, why"
+session "$init" "$initialized" \
+  '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' \
+  '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"memory_remember","arguments":{"key":"deploy-rule","content":"Deploys need a green main branch.","aspects":["procedural"],"basis":"told","sources":["session:proof-1"]}}}' \
+  '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"memory_remember","arguments":{"key":"friday-deploy","content":"The Friday deploy waits, because main is red.","aspects":["episodic"],"basis":"inferred","derived_from":["deploy-rule"]}}}' \
+  '{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"memory_recall","arguments":{"query":"when can we deploy main","k":5}}}' \
+  '{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"memory_why","arguments":{"key":"friday-deploy"}}}'
+
+for tool in memory_remember memory_intend memory_recall memory_fulfil memory_forget memory_why; do
+  reply 2 | grep -q "\"name\":\"$tool\"" || fail "tools/list lacks $tool"
+done
+reply 3 | grep -q 'deploy-rule' || fail "remember did not answer with its key"
+reply 4 | grep -q 'friday-deploy' || fail "remember did not answer with its key"
+reply 5 | grep -q 'deploy-rule' || fail "recall did not find deploy-rule"
+reply 5 | grep -q 'friday-deploy' || fail "recall did not find friday-deploy"
+reply 6 | grep -q 'ancestors' || fail "why gave no ancestors"
+reply 6 | grep -q 'deploy-rule' || fail "why did not name what friday-deploy was derived from"
+reply 6 | grep -q 'inferred' || fail "why did not give the basis"
+echo "checked: six tools; both memories kept; recall finds both; why derives friday-deploy from deploy-rule"
+
+step "session 2: a new server process recalls what session 1 kept"
+session "$init" "$initialized" \
+  '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"memory_recall","arguments":{"query":"green main","k":5}}}'
+reply 2 | grep -q 'deploy-rule' || fail "a new session did not recall deploy-rule"
+echo "checked: the memory outlives the server process"
+
+step "the password"
+echo "checked: it is in none of the server's output, stdout or stderr, in either session"
+
+printf '\nPROOF PASSED\n'
+INSIDE
+
+echo "clean-machine-proof: plugin at $commit, machine $image"
+docker run --rm --network host \
+  -e TYPEDB_PASSWORD -e COMMIT="$commit" -e TARBALL="$tarball" -e PORT="$port" -e PROJECT="$project" \
+  -v "$socket:/var/run/docker.sock" \
+  -v "$docker_bin:/usr/local/bin/docker:ro" \
+  -v "$compose_bin:/usr/local/lib/docker/cli-plugins/docker-compose:ro" \
+  -v "$stage:/proof:ro" \
+  "$image" sh /proof/inside.sh

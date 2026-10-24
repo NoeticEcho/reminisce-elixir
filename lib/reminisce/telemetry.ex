@@ -9,7 +9,9 @@ defmodule Reminisce.Telemetry do
       operation (`:remember`, `:recall`, `:forget`, `:why`, …). Metadata:
       `:op`, `:owner_kind`, `:owner_key` when known, and on stop `:result`
       (`:ok` or `:error`) and `:error` (the reason's tag atom, never its
-      payload). Measurements on stop include `:count` where it means something.
+      payload). Measurements on stop include `:count` where it means something,
+      and for `:recall` `:focus_size`, the number of cues in the focus it
+      answers: its size, never its cues.
     * `[:reminisce, :guard, :refused]` — the secret guard refused a write.
       Metadata: `:rule` and `:op`.
   """
@@ -20,7 +22,7 @@ defmodule Reminisce.Telemetry do
 
     :telemetry.span([:reminisce, op], meta, fn ->
       result = fun.()
-      {result, %{count: count(result)}, Map.merge(meta, outcome(result))}
+      {result, measurements(result), Map.merge(meta, outcome(result))}
     end)
   end
 
@@ -42,6 +44,11 @@ defmodule Reminisce.Telemetry do
   defp tag(reason) when is_atom(reason), do: reason
   defp tag(reason) when is_tuple(reason) and is_atom(elem(reason, 0)), do: elem(reason, 0)
   defp tag(_), do: :other
+
+  defp measurements({:ok, %{focus: %Reminisce.Focus{cues: cues}}} = result),
+    do: %{count: count(result), focus_size: map_size(cues)}
+
+  defp measurements(result), do: %{count: count(result)}
 
   defp count({:ok, list}) when is_list(list), do: length(list)
   defp count({:ok, %{memories: list}}) when is_list(list), do: length(list)

@@ -212,6 +212,51 @@ defmodule Reminisce.Criteria.SecretsTest do
     assert memory_count(store) == 2
   end
 
+  # docs/spec.md §A.2: a cue goes through the secret guard, as a facet does.
+  test "every secret shape sent as a cue, or as a fulfilment's reason, is refused", %{
+    store: store
+  } do
+    shapes = Secrets.shapes()
+    base = %{content: "Check the staging deploy.", aspects: [:prospective], basis: :told}
+    {:ok, plan} = Reminisce.remember(store, @owner, Map.put(base, :cues, [{:event, "deploy"}]))
+    server = MCP.Server.new(store, @owner)
+
+    for {family, secret} <- shapes do
+      for cue <- [{:source, secret}, {:memory, secret}, {:term, secret}, {:event, secret}] do
+        assert {:error, reason} = Reminisce.remember(store, @owner, Map.put(base, :cues, [cue])),
+               "#{family} as a #{elem(cue, 0)} cue was stored"
+
+        # Refused by the guard, or before it as no cue at all; never echoed.
+        assert match?({:secret, _}, reason) or reason in [{:invalid, :cue}, {:too_long, :cues}]
+      end
+
+      assert {:error, {:secret, _}} =
+               Reminisce.remember(store, @owner, Map.put(base, :cues, [{:source, secret}]))
+
+      reply =
+        Jason.decode!(
+          MCP.Server.handle_line(
+            server,
+            call("memory_intend", %{
+              "content" => "Check the staging deploy.",
+              "basis" => "told",
+              "cues" => [%{"kind" => "source", "value" => secret}]
+            })
+          )
+        )
+
+      assert %{"error" => "secret"} = reply["result"]["structuredContent"]
+      refute Jason.encode!(reply) =~ secret
+
+      assert {:error, {:secret, _}} = Reminisce.fulfil(store, @owner, plan.key, reason: secret)
+    end
+
+    assert memory_count(store) == 1
+
+    {:ok, %{memory: %{status: :active, cues: [{:event, "deploy"}]}}} =
+      Reminisce.why(store, @owner, plan.key)
+  end
+
   def forward(event, measurements, meta, pid),
     do: send(pid, {:telemetry, event, measurements, meta})
 

@@ -1,0 +1,12 @@
+# The SHA-256 of each server tarball this version of the plugin installs,
+# one line per platform, in sha256sum's format:
+#
+#   SHA256  reminisce-mcp-VERSION-OS-ARCH.tar.gz
+#
+# scripts/install-server checks the tarball it downloads against the line
+# here for it. A version's plugin is published before its release's tarballs
+# are built, so a new version has none: install-server then checks against
+# the release's own .sha256 file, and says that this finds a damaged
+# download, not a release whose files were replaced. Lines added here, from
+# a published release's .sha256 files, make the check independent of the
+# release.

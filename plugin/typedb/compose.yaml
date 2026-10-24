@@ -1,0 +1,36 @@
+# SPDX-FileCopyrightText: 2026 NoeticEcho and the reminisce contributors
+# SPDX-License-Identifier: Apache-2.0
+#
+# TypeDB for reminisce, on this machine only. `first-run` (beside this file)
+# starts it and sets it up. Do not start it by hand with `up -d` and leave it:
+# a new TypeDB has a default admin password until first-run replaces it, and
+# `restart: unless-stopped` brings it back after a reboot.
+#
+# - The image is TypeDB CE 3.12.1, pinned by digest.
+# - It listens on 127.0.0.1 only, on REMINISCE_TYPEDB_PORT (default 8000): its
+#   HTTP API, which is all reminisce uses. The gRPC port is not published.
+# - Its data is in the named volume `data`, which `docker compose down` keeps
+#   and `docker compose down --volumes` deletes.
+# - TypeDB's diagnostics are off: no usage or error reports leave the machine,
+#   and no monitoring port is opened.
+# - No password is in this file. A new TypeDB's admin user has TypeDB's
+#   default password; first-run replaces it with TYPEDB_PASSWORD from the
+#   environment.
+name: reminisce-typedb
+
+services:
+  typedb:
+    image: typedb/typedb:3.12.1@sha256:4224951114b044d52e2fe48108be26ae2734726041dae8d63453ecd407fe2422
+    # Appended to the image's `typedb server --storage.data-directory=...`.
+    command:
+      - --diagnostics.reporting.metrics=false
+      - --diagnostics.reporting.errors=false
+      - --diagnostics.monitoring.enabled=false
+    ports:
+      - "127.0.0.1:${REMINISCE_TYPEDB_PORT:-8000}:8000"
+    volumes:
+      - data:/var/lib/typedb/data
+    restart: unless-stopped
+
+volumes:
+  data:

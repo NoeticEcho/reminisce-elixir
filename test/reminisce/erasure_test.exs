@@ -250,7 +250,16 @@ defmodule Reminisce.WithdrawKeepTest do
   end
 
   test "words cannot be kept, and a name must be a type label" do
-    for keep <- [["content"], ["facet"], [:content], ["tenant id"], [""], "tenant_id", [1]] do
+    for keep <- [
+          ["content"],
+          ["facet"],
+          ["cue"],
+          [:content],
+          ["tenant id"],
+          [""],
+          "tenant_id",
+          [1]
+        ] do
       assert_raise ArgumentError, fn -> empty_store(withdraw_keep: keep) end
     end
 

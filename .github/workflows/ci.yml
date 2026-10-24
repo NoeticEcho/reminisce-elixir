@@ -14,11 +14,13 @@ permissions:
 jobs:
   test:
     # Format, warnings-as-errors, and the full suite against a real TypeDB.
-    # REMINISCE_REQUIRE_TYPEDB=1 makes a missing server a failure, never a skip.
+    # REMINISCE_REQUIRE_TYPEDB=1 makes a missing server a failure, never a skip;
+    # REMINISCE_REQUIRE_DOCKER=1 does the same for the first-run test, which
+    # starts a TypeDB of its own with plugin/typedb/compose.yaml.
     runs-on: ubuntu-24.04
     services:
       typedb:
-        image: typedb/typedb:3.12.1
+        image: typedb/typedb:3.12.1@sha256:4224951114b044d52e2fe48108be26ae2734726041dae8d63453ecd407fe2422
         ports:
           - 1729:1729
           - 8000:8000
@@ -28,8 +30,11 @@ jobs:
       LC_ALL: C.UTF-8
       TYPEDB_URL: http://127.0.0.1:8000
       REMINISCE_REQUIRE_TYPEDB: "1"
+      REMINISCE_REQUIRE_DOCKER: "1"
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
       - uses: erlef/setup-beam@54075bcc5e249e4758d363f27d099f55d843f124 # v1.24.1
         with:
           otp-version: "29"
@@ -63,7 +68,7 @@ jobs:
     runs-on: ubuntu-24.04
     services:
       typedb:
-        image: typedb/typedb:3.12.1
+        image: typedb/typedb:3.12.1@sha256:4224951114b044d52e2fe48108be26ae2734726041dae8d63453ecd407fe2422
         ports:
           - 1729:1729
           - 8000:8000
@@ -75,6 +80,8 @@ jobs:
       REMINISCE_REQUIRE_TYPEDB: "1"
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
       - uses: erlef/setup-beam@54075bcc5e249e4758d363f27d099f55d843f124 # v1.24.1
         with:
           otp-version: "28"
@@ -107,6 +114,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
+          persist-credentials: false
       - name: Install gitleaks
         run: |
           curl -sSfL -o gitleaks.tgz "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"

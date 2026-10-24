@@ -1,0 +1,24 @@
+#!/bin/sh
+# SPDX-FileCopyrightText: 2026 NoeticEcho and the reminisce contributors
+# SPDX-License-Identifier: Apache-2.0
+#
+# The plugin's MCP server: starts the reminisce server that
+# scripts/install-server put in this plugin's server/ directory, with the
+# arguments and environment the plugin's settings give it. It replaces itself
+# with the server (exec), so nothing stands between the client and the
+# server's stdin and stdout.
+#
+# It downloads nothing and installs nothing. When the server is not
+# installed, it says how to install it, on stderr, and exits 1.
+
+root=$(cd "$(dirname "$0")/.." && pwd) || exit 1
+server=$root/server/bin/reminisce-mcp
+
+if [ ! -x "$server" ]; then
+  printf '%s\n' \
+    "reminisce: the server is not installed in $root/server." \
+    "Install it once: type /noetic-reminisce:setup, or run sh '$root/scripts/install-server'." >&2
+  exit 1
+fi
+
+exec "$server" "$@"

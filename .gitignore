@@ -6,3 +6,6 @@ cover/
 erl_crash.dump
 .elixir_ls/
 reminisce-*.tar
+/plugin/server/
+/plugin/server.old/
+/plugin/.install-server.*

@@ -12,7 +12,9 @@ defmodule Reminisce.Limits do
   | `query` | 2,048 |
   | each facet (`name=value`), `reason` | 2,048 |
   | each source reference | 2,048 |
-  | `key`, each `derived_from` key, owner kind and key, `subject`, `consent`, `reviewed_by` | 256 |
+  | each cue (`kind:value`) | 2,048 |
+  | `key`, each `derived_from` key, owner kind and key, `subject`, `consent`, `reviewed_by`, each `affect_scope` | 256 |
+  | `persona_set_by`, `persona_proposed_by`, each `persona_scope` | 256 |
   """
 
   @caps %{
@@ -21,12 +23,17 @@ defmodule Reminisce.Limits do
     facets: 2_048,
     reason: 2_048,
     sources: 2_048,
+    cues: 2_048,
     key: 256,
     derived_from: 256,
     owner: 256,
     subject: 256,
     consent: 256,
-    reviewed_by: 256
+    reviewed_by: 256,
+    affect_scope: 256,
+    persona_set_by: 256,
+    persona_proposed_by: 256,
+    persona_scope: 256
   }
 
   @doc "The cap for `field`, in bytes."
@@ -49,6 +56,8 @@ defmodule Reminisce.Limits do
   defp fits?({n, v}, cap) when is_atom(n), do: fits?({Atom.to_string(n), v}, cap)
   defp fits?(list, cap) when is_list(list), do: Enum.all?(list, &fits?(&1, cap))
   defp fits?(%{"name" => n, "value" => v}, cap), do: fits?({n, v}, cap)
+  # A cue as the MCP server takes it, measured as stored: `kind:value`.
+  defp fits?(%{"kind" => k, "value" => v}, cap) when is_binary(k), do: fits?({k, v}, cap)
 
   # Facets may come as a map of name => value; each pair is measured as stored.
   defp fits?(map, cap) when is_map(map) and not is_struct(map),

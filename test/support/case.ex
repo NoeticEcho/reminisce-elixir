@@ -67,6 +67,15 @@ defmodule Reminisce.Case do
     dir
   end
 
+  @doc """
+  A clock the test sets: answers `{now, set}`, where `now.()` is the time
+  `set.(t)` last gave, from `start`.
+  """
+  def settable_clock(%DateTime{} = start) do
+    agent = start_supervised!({Agent, fn -> start end}, id: make_ref())
+    {fn -> Agent.get(agent, & &1) end, &Agent.update(agent, fn _ -> &1 end)}
+  end
+
   def fixed_clock(%DateTime{} = start) do
     agent = start_supervised!({Agent, fn -> start end}, id: make_ref())
 

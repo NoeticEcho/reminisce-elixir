@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" role="img" aria-label="reminisce: memories linked to the one they came from">
+  <rect width="256" height="256" rx="48" fill="#1d2b2a"/>
+  <path d="M128 52a76 76 0 1 1-76 76" fill="none" stroke="#5f8f86" stroke-width="10" stroke-linecap="round"/>
+  <path d="M52 122l-18 20M52 122l18 20" fill="none" stroke="#5f8f86" stroke-width="10" stroke-linecap="round"/>
+  <g stroke="#a9c9c2" stroke-width="8" stroke-linecap="round">
+    <line x1="128" y1="118" x2="92" y2="166"/>
+    <line x1="128" y1="118" x2="164" y2="166"/>
+    <line x1="92" y1="166" x2="164" y2="166"/>
+  </g>
+  <circle cx="128" cy="112" r="24" fill="#f2c14e"/>
+  <circle cx="92" cy="168" r="16" fill="#e8f0ee"/>
+  <circle cx="164" cy="168" r="16" fill="#e8f0ee"/>
+</svg>

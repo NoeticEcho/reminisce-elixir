@@ -1,0 +1,12 @@
+%% SPDX-FileCopyrightText: 2026 NoeticEcho and the reminisce contributors
+%% SPDX-License-Identifier: Apache-2.0
+%%
+%% The resolver configuration of the release, read through ERL_INETRC
+%% (rel/env.sh.eex, docs/server-artifact.md).
+%%
+%% At boot, inet_config looks its own host name up (through the system's
+%% resolver: nscd, DNS) to learn the domain, unless a domain is configured. The
+%% server never needs it, so the domain is set here, to a name reserved never to
+%% resolve (RFC 6761), and the lookup does not happen. The only connection the
+%% server then makes is to TypeDB.
+{domain, "invalid"}.

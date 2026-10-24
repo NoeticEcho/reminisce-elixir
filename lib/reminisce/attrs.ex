@@ -9,7 +9,7 @@ defmodule Reminisce.Attrs do
   alias Reminisce.{Memory, Store}
 
   @fields ~w(content aspects basis confidence valid_from valid_to occurred_at due_at sources
-             derived_from facets salience subject consent key reviewed_by reason)a
+             derived_from facets salience subject consent key reviewed_by reason cues)a
 
   def fields, do: @fields
 
@@ -36,6 +36,7 @@ defmodule Reminisce.Attrs do
          {:ok, key} <- optional_string(:key, attrs[:key]),
          {:ok, reviewed_by} <- optional_string(:reviewed_by, attrs[:reviewed_by]),
          {:ok, reason} <- optional_string(:reason, attrs[:reason]),
+         {:ok, cues} <- cues(store, attrs[:cues], aspects, subject),
          :ok <- generated_confidence(basis, confidence, reviewed_by) do
       {:ok,
        %{
@@ -55,14 +56,16 @@ defmodule Reminisce.Attrs do
          consent: consent,
          key: key,
          reviewed_by: reviewed_by,
-         reason: reason
+         reason: reason,
+         cues: cues,
+         cue_words: cue_words(attrs[:cues])
        }}
     end
   end
 
   def normalize(_store, _attrs), do: {:error, {:invalid, :attrs}}
 
-  @capped ~w(content facets sources key derived_from subject consent reviewed_by reason)a
+  @capped ~w(content facets sources key derived_from subject consent reviewed_by reason cues)a
 
   # Sizes first: nothing over its cap is scanned, parsed or sent anywhere.
   defp caps(attrs) do
@@ -189,6 +192,122 @@ defmodule Reminisce.Attrs do
   end
 
   defp facet(_), do: {:error, {:invalid, :facets}}
+
+  # -- cues (docs/spec.md §A.2) -------------------------------------------------
+  #
+  # A cue is a trigger of an intention, kept as one string: `event:<kind>`,
+  # `term:<term>`, `source:<reference>`, `memory:<key>` or `audience`. Only a
+  # prospective memory takes cues, and at most 16. Every one comes from the
+  # arguments of the write, never from a memory's words.
+
+  @max_cues 16
+  @cue_kinds ~w(event term source memory)
+
+  @doc false
+  def max_cues, do: @max_cues
+
+  defp cues(_store, nil, _aspects, _subject), do: {:ok, []}
+  defp cues(_store, [], _aspects, _subject), do: {:ok, []}
+
+  defp cues(store, list, aspects, subject) when is_list(list) do
+    cond do
+      :prospective not in aspects ->
+        {:error, {:invalid, :cues}}
+
+      length(list) > @max_cues ->
+        {:error, {:invalid, :cues}}
+
+      true ->
+        list
+        |> Enum.reduce_while({:ok, []}, fn cue, {:ok, acc} ->
+          case cue(store, cue, subject) do
+            {:ok, stored} -> {:cont, {:ok, [stored | acc]}}
+            error -> {:halt, error}
+          end
+        end)
+        |> case do
+          {:ok, acc} -> {:ok, acc |> Enum.uniq() |> Enum.sort()}
+          error -> error
+        end
+    end
+  end
+
+  defp cues(_store, _cues, _aspects, _subject), do: {:error, {:invalid, :cues}}
+
+  # Each cue's value as the caller gave it. A term cue is stored folded, and
+  # folding can hide a secret's shape from the guard, so the guard scans
+  # these too.
+  defp cue_words(list) when is_list(list) do
+    Enum.flat_map(list, fn
+      {_kind, value} when is_binary(value) -> [value]
+      %{"value" => value} when is_binary(value) -> [value]
+      _ -> []
+    end)
+  end
+
+  defp cue_words(_), do: []
+
+  # An audience cue needs a subject: it fires when the recall's audience is
+  # one of the intention's subjects.
+  defp cue(_store, audience, subject) when audience in [:audience, "audience"],
+    do: if(subject, do: {:ok, "audience"}, else: {:error, {:invalid, :cue}})
+
+  defp cue(store, %{"kind" => kind} = cue, subject),
+    do:
+      if(kind == "audience",
+        do: cue(store, kind, subject),
+        else: cue(store, {kind, cue["value"]}, subject)
+      )
+
+  defp cue(store, {kind, value}, subject) when is_atom(kind) and kind not in [nil, true, false],
+    do: cue(store, {Atom.to_string(kind), value}, subject)
+
+  defp cue(store, {kind, value}, _subject) when kind in @cue_kinds and is_binary(value),
+    do: cue_value(store, kind, value)
+
+  defp cue(_store, _cue, _subject), do: {:error, {:invalid, :cue}}
+
+  # An event kind is a host's name.
+  defp cue_value(_store, "event", kind) do
+    if Regex.match?(~r/\A[a-z0-9_.-]{1,64}\z/, kind),
+      do: {:ok, "event:" <> kind},
+      else: {:error, {:invalid, :cue}}
+  end
+
+  # A term cue is stored as the analyser's one term for the word: the form a
+  # query's terms take in the focus.
+  defp cue_value(%Store{analyser: analyser}, "term", word) do
+    case word |> analyser.terms() |> Enum.uniq() do
+      [term] -> {:ok, "term:" <> term}
+      _ -> {:error, {:invalid, :cue}}
+    end
+  end
+
+  defp cue_value(_store, "memory", key) do
+    if key != "" and byte_size(key) <= Reminisce.Limits.cap(:key),
+      do: {:ok, "memory:" <> key},
+      else: {:error, {:invalid, :cue}}
+  end
+
+  defp cue_value(_store, "source", ref),
+    do: if(ref != "", do: {:ok, "source:" <> ref}, else: {:error, {:invalid, :cue}})
+
+  @doc false
+  # A stored cue, as the API gives it back.
+  def parse_cue("audience"), do: :audience
+
+  def parse_cue(stored) do
+    case String.split(stored, ":", parts: 2) do
+      [kind, value] when kind in @cue_kinds -> {String.to_existing_atom(kind), value}
+      _ -> {:unknown, stored}
+    end
+  end
+
+  @doc false
+  # A cue as recall's `because` names it.
+  def cue_string(:audience), do: "audience"
+  def cue_string({:unknown, stored}), do: stored
+  def cue_string({kind, value}), do: "#{kind}:#{value}"
 
   defp optional_string(_field, nil), do: {:ok, nil}
   defp optional_string(_field, s) when is_binary(s) and s != "", do: {:ok, s}

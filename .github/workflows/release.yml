@@ -1,0 +1,280 @@
+# SPDX-FileCopyrightText: 2026 NoeticEcho and the reminisce contributors
+# SPDX-License-Identifier: Apache-2.0
+
+# The MCP server as a release with its own runtime, for four platforms
+# (docs/server-artifact.md). Each platform builds with scripts/build-server,
+# checks the tarball against its checksum, and runs test/mcp's OS-process
+# cases against the unpacked release with a real TypeDB. The Linux tarballs
+# then start in bare images, with no compiler, Erlang or anything else
+# installed: Debian slim, and AlmaLinux 8 minimal for the oldest glibc
+# claimed (2.28).
+#
+# On a tag vX.Y.Z the tarballs and their checksums are attached to that tag's
+# GitHub release, created here as a draft if there is none: the one release
+# of the version, which its owner edits and publishes. Attaching refuses a release that is published or that
+# already has files: the tarballs are not byte-for-byte reproducible, so a
+# second run would change files whose checksums are already pinned. This
+# workflow publishes nothing else: no package, no push.
+
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  pull_request:
+    paths:
+      - .github/workflows/release.yml
+      - scripts/build-server
+      - rel/**
+      - mix.exs
+      - mix.lock
+      - lib/mix/tasks/reminisce.mcp.ex
+      - lib/reminisce/mcp/**
+      - test/mcp/**
+      - test/support/mcp_server.ex
+      - test/test_helper.exs
+
+permissions:
+  contents: read
+
+env:
+  LANG: C.UTF-8
+  LC_ALL: C.UTF-8
+  TYPEDB_VERSION: 3.12.1
+  REMINISCE_REQUIRE_TYPEDB: "1"
+
+jobs:
+  linux:
+    # Built on AlmaLinux 8 (manylinux_2_28, glibc 2.28), tested in the same
+    # container against TypeDB as a service, with the network test required.
+    name: linux-${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-24.04
+            image: quay.io/pypa/manylinux_2_28_x86_64:2026.10.10-1@sha256:4131ddd7acb9c6c966af02fe7e71edc51e078c2d41f475966697676430bfa2ae
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+            image: quay.io/pypa/manylinux_2_28_aarch64:2026.10.10-1@sha256:abd1230aa9e4058a74b89d27cd14ba18c0db036d7bfe6e6f219a29ea63c24eb6
+    runs-on: ${{ matrix.runner }}
+    container:
+      image: ${{ matrix.image }}
+      options: --cap-add=SYS_PTRACE
+    services:
+      typedb:
+        image: typedb/typedb:3.12.1@sha256:4224951114b044d52e2fe48108be26ae2734726041dae8d63453ecd407fe2422
+    env:
+      TYPEDB_URL: http://typedb:8000
+      REMINISCE_REQUIRE_STRACE: "1"
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - name: Install build and test tools
+        run: dnf -q -y install perl strace procps-ng binutils
+      - name: Build
+        run: scripts/build-server "$PWD/dist"
+      - name: Check and unpack
+        run: |
+          cd dist
+          sha256sum --check ./*.sha256
+          mkdir -p "$RUNNER_TEMP/server"
+          tar -xzf ./*.tar.gz -C "$RUNNER_TEMP/server"
+      - name: Wait for TypeDB
+        run: |
+          for i in $(seq 1 60); do
+            curl --fail --silent "$TYPEDB_URL/health" && exit 0
+            sleep 2
+          done
+          echo "TypeDB did not answer /health" >&2
+          exit 1
+      - name: test/mcp against the release
+        run: |
+          work=$PWD/_build/server
+          PATH="$(ls -d "$work"/elixir-*)/bin:$(ls -d "$work"/otp-*)/bin:$PATH"
+          export PATH MIX_HOME="$work/mix" HEX_HOME="$work/hex" MIX_ENV=test
+          export REMINISCE_MCP_SERVER="$(ls -d "$RUNNER_TEMP"/server/reminisce-mcp-*)/bin/reminisce-mcp"
+          mix deps.get
+          mix test test/mcp/stdio_test.exs test/mcp/os_process_test.exs test/mcp/release_test.exs \
+            test/mcp/tls_test.exs test/mcp/network_trace_test.exs test/mcp/network_test.exs
+      - name: Size
+        run: |
+          cd dist
+          tarball=$(ls ./*.tar.gz)
+          echo "$tarball: $(wc -c <"$tarball") bytes packed, $(du -sk "$RUNNER_TEMP/server" | cut -f1) KiB unpacked" |
+            tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: server-linux-${{ matrix.arch }}
+          path: dist/*
+          if-no-files-found: error
+
+  macos:
+    # Built for macOS 13 and later, tested on the runner against a native
+    # TypeDB pinned by checksum. strace does not exist here: the network test
+    # runs on Linux.
+    name: macos-${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            runner: macos-15
+            typedb: mac-arm64
+            typedb_sha256: 0e146d069473223d5d2523cdf0e889738f73cd2ae8d532bdf611d2f200ae6c9f
+          - arch: x86_64
+            runner: macos-15-intel
+            typedb: mac-x86_64
+            typedb_sha256: ed0e49f69386514e0b5647c7292a6734cacef211b6c671c38842ff2a2fb16777
+    runs-on: ${{ matrix.runner }}
+    env:
+      TYPEDB_URL: http://127.0.0.1:8000
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - name: Build
+        run: scripts/build-server "$PWD/dist"
+      - name: Check and unpack
+        run: |
+          cd dist
+          shasum -a 256 --check ./*.sha256
+          mkdir -p "$RUNNER_TEMP/server"
+          tar -xzf ./*.tar.gz -C "$RUNNER_TEMP/server"
+      - name: Start TypeDB
+        run: |
+          name=typedb-all-${{ matrix.typedb }}-$TYPEDB_VERSION
+          curl -fsSL -o "$RUNNER_TEMP/typedb.zip" \
+            "https://repo.typedb.com/public/public-release/raw/names/typedb-all-${{ matrix.typedb }}/versions/$TYPEDB_VERSION/$name.zip"
+          echo "${{ matrix.typedb_sha256 }}  $RUNNER_TEMP/typedb.zip" | shasum -a 256 --check
+          unzip -q "$RUNNER_TEMP/typedb.zip" -d "$RUNNER_TEMP"
+          nohup "$RUNNER_TEMP/$name/typedb" server >"$RUNNER_TEMP/typedb.log" 2>&1 &
+          for i in $(seq 1 60); do
+            curl --fail --silent "$TYPEDB_URL/health" && exit 0
+            sleep 2
+          done
+          tail -20 "$RUNNER_TEMP/typedb.log" >&2
+          exit 1
+      - name: test/mcp against the release
+        run: |
+          work=$PWD/_build/server
+          PATH="$(ls -d "$work"/elixir-*)/bin:$(ls -d "$work"/otp-*)/bin:$PATH"
+          export PATH MIX_HOME="$work/mix" HEX_HOME="$work/hex" MIX_ENV=test
+          export REMINISCE_MCP_SERVER="$(ls -d "$RUNNER_TEMP"/server/reminisce-mcp-*)/bin/reminisce-mcp"
+          mix deps.get
+          mix test test/mcp/stdio_test.exs test/mcp/os_process_test.exs test/mcp/release_test.exs \
+            test/mcp/tls_test.exs test/mcp/network_trace_test.exs
+      - name: Size
+        run: |
+          cd dist
+          tarball=$(ls ./*.tar.gz)
+          echo "$tarball: $(wc -c <"$tarball") bytes packed, $(du -sk "$RUNNER_TEMP/server" | cut -f1) KiB unpacked" |
+            tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: server-macos-${{ matrix.arch }}
+          path: dist/*
+          if-no-files-found: error
+
+  bare:
+    # The Linux tarball, unpacked on the runner, started in an image with
+    # nothing installed, against TypeDB on the runner's network: remember,
+    # then recall.
+    name: bare-${{ matrix.arch }}-${{ matrix.name }}
+    needs: linux
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x86_64, arm64]
+        name: [debian-13-slim, almalinux-8-minimal]
+        include:
+          - arch: x86_64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+          - name: debian-13-slim
+            image: debian:13-slim@sha256:a29215f6a35e51e22adffa17f89e9d2ef06214e64a2bad10d765c46aea49f11f
+          - name: almalinux-8-minimal
+            image: quay.io/almalinuxorg/8-minimal:8.10-20261002@sha256:d24de7ec46ee4409f9ddd61b67b43e5785fd13c9cc3eed3fbbd31453acebda9e
+    runs-on: ${{ matrix.runner }}
+    services:
+      typedb:
+        image: typedb/typedb:3.12.1@sha256:4224951114b044d52e2fe48108be26ae2734726041dae8d63453ecd407fe2422
+        ports:
+          - 127.0.0.1:8000:8000
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: server-linux-${{ matrix.arch }}
+          path: dist
+      - name: Check and unpack
+        run: |
+          cd dist
+          sha256sum --check ./*.sha256
+          mkdir -p "$RUNNER_TEMP/server"
+          tar -xzf ./*.tar.gz -C "$RUNNER_TEMP/server"
+      - name: Wait for TypeDB
+        run: |
+          for i in $(seq 1 60); do
+            curl --fail --silent http://127.0.0.1:8000/health && exit 0
+            sleep 2
+          done
+          echo "TypeDB did not answer /health" >&2
+          exit 1
+      - name: Remember and recall in ${{ matrix.name }}
+        env:
+          IMAGE: ${{ matrix.image }}
+        run: |
+          server=$(cd "$RUNNER_TEMP/server" && ls -d reminisce-mcp-*)
+          remember='{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"memory_remember","arguments":{"content":"the bare image test ran here","aspects":["episodic"],"basis":"observed"}}}'
+          recall='{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"memory_recall","arguments":{"query":"bare image test"}}}'
+          start=$(date +%s%N)
+          printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' "$remember" "$recall" |
+            docker run --rm -i --network host -e TYPEDB_URL=http://127.0.0.1:8000 -e TYPEDB_PASSWORD=password \
+              -v "$RUNNER_TEMP/server:/server:ro" "$IMAGE" \
+              "/server/$server/bin/reminisce-mcp" --owner agent:ci --database bare >out.jsonl 2>err.txt ||
+            { cat err.txt >&2; exit 1; }
+          end=$(date +%s%N)
+          cat out.jsonl
+          [ "$(wc -l <out.jsonl)" -eq 3 ] || { cat err.txt >&2; exit 1; }
+          jq -e 'select(.id == 3) | .result.isError == false and (.result.content[0].text | fromjson | .memories | length) == 1' out.jsonl
+          echo "$server in ${{ matrix.name }}: answered three requests and exited in $(( (end - start) / 1000000 )) ms" |
+            tee -a "$GITHUB_STEP_SUMMARY"
+
+  attach:
+    # Only on a tag, and only once every platform has passed.
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [linux, macos, bare]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      TAG: ${{ github.ref_name }}
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: server-*
+          path: dist
+          merge-multiple: true
+      - name: Check the four tarballs against the tag
+        run: |
+          cd dist
+          sha256sum --check ./*.sha256
+          count=$(ls reminisce-mcp-"${TAG#v}"-*.tar.gz | wc -l)
+          [ "$count" -eq 4 ] || { echo "expected 4 tarballs for $TAG, found $count" >&2; exit 1; }
+      - name: Attach to the draft release
+        run: |
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" --draft --verify-tag --title "$TAG" \
+              --notes "The MCP server for $TAG, built by the release workflow."
+          fi
+          state=$(gh release view "$TAG" --json isDraft,assets --jq '"\(.isDraft) \(.assets | length)"')
+          [ "$state" = "true 0" ] || {
+            echo "the release $TAG is published or already has files ($state): not changing it" >&2
+            exit 1
+          }
+          gh release upload "$TAG" dist/*

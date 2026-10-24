@@ -1,0 +1,10 @@
+{
+  "clock": "2026-06-01T00:00:00Z",
+  "intentions": 10,
+  "kept_out_of_due": 2,
+  "expiring": 4,
+  "expires": [
+    {"owner": ["project", "quillmark"], "keys": ["P-002", "P-004", "P-012"]},
+    {"owner": ["agent", "scribe"], "keys": ["Q-001"]}
+  ]
+}

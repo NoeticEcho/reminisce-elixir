@@ -4,7 +4,7 @@
 defmodule Reminisce.MixProject do
   use Mix.Project
 
-  @version "0.2.1"
+  @version "0.5.0"
   @source_url "https://github.com/NoeticEcho/reminisce-elixir"
 
   def project do
@@ -14,12 +14,15 @@ defmodule Reminisce.MixProject do
       elixir: "~> 1.19",
       start_permanent: Mix.env() == :prod,
       elixirc_paths: elixirc_paths(Mix.env()),
+      # The scripts that made a fixture are kept beside it, never run as tests.
+      test_ignore_filters: [&String.starts_with?(&1, "test/fixtures/")],
       deps: deps(),
       name: "reminisce",
       description: "Agent memory for TypeDB: an Elixir library with an MCP stdio server.",
       source_url: @source_url,
       homepage_url: @source_url,
       package: package(),
+      releases: releases(),
       docs: docs()
     ]
   end
@@ -37,7 +40,8 @@ defmodule Reminisce.MixProject do
       {:finch, "~> 0.23"},
       {:jason, "~> 1.4"},
       {:telemetry, "~> 1.2"},
-      {:ex_doc, "~> 0.40", only: :dev, runtime: false}
+      {:ex_doc, "~> 0.40", only: :dev, runtime: false},
+      {:yaml_elixir, "~> 2.12", only: :test}
     ]
   end
 
@@ -54,6 +58,15 @@ defmodule Reminisce.MixProject do
     ]
   end
 
+  # The MCP server as a release with its own runtime: docs/server-artifact.md.
+  # scripts/build-server builds it with a runtime it builds first; a plain
+  # `mix release` uses the runtime that runs Mix.
+  defp releases do
+    [
+      reminisce: [include_executables_for: [:unix]]
+    ]
+  end
+
   defp docs do
     [
       main: "readme",
@@ -65,7 +78,7 @@ defmodule Reminisce.MixProject do
       ],
       groups_for_modules: [
         Hooks: [Reminisce.Policy, Reminisce.Analyser, Reminisce.Similarity],
-        "The MCP server": [Reminisce.MCP.Server, Mix.Tasks.Reminisce.Mcp]
+        "The MCP server": [Reminisce.MCP.Server, Reminisce.MCP.CLI, Mix.Tasks.Reminisce.Mcp]
       ]
     ]
   end

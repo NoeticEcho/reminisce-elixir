@@ -1,0 +1,144 @@
+define
+
+attribute memory_key,
+ value string;
+attribute owner_kind,
+ value string;
+attribute owner_key,
+ value string;
+attribute content,
+ value string;
+attribute aspect,
+ value string;
+attribute facet,
+ value string;
+attribute basis,
+ value string @values("observed", "told", "inferred", "generated");
+attribute confidence,
+ value double;
+attribute salience,
+ value double;
+attribute recall_count,
+ value integer;
+attribute last_recalled_at,
+ value datetime-tz;
+attribute valid_from,
+ value datetime-tz;
+attribute valid_to,
+ value datetime-tz;
+attribute occurred_at,
+ value datetime-tz;
+attribute due_at,
+ value datetime-tz;
+attribute recorded_at,
+ value datetime-tz;
+attribute status,
+ value string @values("active", "inactive", "archived", "superseded", "forgotten", "withdrawn");
+attribute status_reason,
+ value string;
+attribute status_changed_at,
+ value datetime-tz;
+attribute reviewed_by,
+ value string;
+attribute reference,
+ value string;
+attribute subject_ref,
+ value string;
+attribute consent_scope,
+ value string;
+attribute withdrawal_key,
+ value string;
+attribute reason,
+ value string;
+attribute record_count,
+ value integer;
+attribute weight,
+ value double;
+attribute interval_end,
+ value datetime-tz;
+attribute pass_key,
+ value string;
+entity memory,
+  owns aspect @card(1..),
+  owns basis @card(1..1),
+  owns confidence @card(0..1),
+  owns content @card(0..1),
+  owns due_at @card(0..1),
+  owns facet @card(0..),
+  owns last_recalled_at @card(0..1),
+  owns memory_key @key,
+  owns occurred_at @card(0..1),
+  owns owner_key @card(1..1),
+  owns owner_kind @card(1..1),
+  owns recall_count @card(1..1),
+  owns recorded_at @card(1..1),
+  owns reviewed_by @card(0..1),
+  owns salience @card(1..1),
+  owns status @card(1..1),
+  owns status_changed_at @card(0..1),
+  owns status_reason @card(0..1),
+  owns valid_from @card(1..1),
+  owns valid_to @card(0..1),
+  plays association:member,
+  plays causation:cause,
+  plays causation:effect,
+  plays concerning:memory,
+  plays contradiction:claim,
+  plays derivation:derived,
+  plays derivation:source,
+  plays sourcing:claim,
+  plays supersession:earlier,
+  plays supersession:later;
+entity source,
+  owns reference @key,
+  plays sourcing:source;
+entity subject,
+  owns subject_ref @key,
+  plays concerning:subject,
+  plays withdrawing:subject;
+entity withdrawal,
+  owns reason @card(1..1),
+  owns record_count @card(1..1),
+  owns recorded_at @card(1..1),
+  owns withdrawal_key @key,
+  plays withdrawing:withdrawal;
+entity pass,
+  owns interval_end @card(1..1),
+  owns owner_key @card(1..1),
+  owns owner_kind @card(1..1),
+  owns pass_key @key,
+  owns record_count @card(1..1),
+  owns recorded_at @card(1..1);
+relation sourcing,
+  relates claim @card(1..1),
+  relates source @card(1..1);
+relation derivation,
+  relates derived @card(1..1),
+  relates source @card(1..1),
+  plays contradiction:claim;
+relation supersession,
+  relates earlier @card(1..1),
+  relates later @card(1..1);
+relation contradiction,
+  relates claim @card(2..),
+  owns reason @card(0..1);
+relation causation,
+  relates cause @card(1..1),
+  relates effect @card(1..1),
+  plays contradiction:claim;
+relation association,
+  relates member @card(2..),
+  owns facet @card(0..),
+  owns weight @card(0..1);
+relation concerning,
+  relates memory @card(1..1),
+  relates subject @card(1..1),
+  owns consent_scope @card(1..1);
+relation withdrawing,
+  relates subject @card(1..1),
+  relates withdrawal @card(1..1);
+fun ancestors($m: memory) -> { memory }:
+    match
+      { derivation (derived: $m, source: $s); } or
+      { derivation (derived: $m, source: $p); let $s in ancestors($p); };
+    return { $s };

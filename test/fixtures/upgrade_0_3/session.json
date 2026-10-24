@@ -1,0 +1,508 @@
+[
+  {
+    "due": [
+      {
+        "because": [
+          "time"
+        ],
+        "key": "I-109"
+      },
+      {
+        "because": [
+          "event:session_start"
+        ],
+        "key": "I-103"
+      },
+      {
+        "because": [
+          "memory:L-001"
+        ],
+        "key": "I-105"
+      }
+    ],
+    "keys": [
+      "L-001",
+      "L-008",
+      "I-003",
+      "I-106",
+      "L-007",
+      "D-005",
+      "I-104",
+      "I-105"
+    ],
+    "query": "why is the pipeline so slow when the dependency cache misses",
+    "scores": [
+      12272,
+      6136,
+      3526,
+      3526,
+      3526,
+      2610,
+      2610,
+      2610
+    ]
+  },
+  {
+    "due": [],
+    "keys": [
+      "L-002",
+      "I-109",
+      "D-005",
+      "L-034",
+      "L-011",
+      "L-023",
+      "L-043",
+      "L-039"
+    ],
+    "query": "snapshot tests fail randomly on some runners",
+    "scores": [
+      13294,
+      6647,
+      4386,
+      4034,
+      3526,
+      3526,
+      3526,
+      3121
+    ]
+  },
+  {
+    "due": [],
+    "keys": [
+      "L-003",
+      "L-029",
+      "L-002",
+      "I-109",
+      "L-001",
+      "D-005",
+      "L-034",
+      "L-008"
+    ],
+    "query": "worker ran out of memory making thumbnails of a huge photo",
+    "scores": [
+      11272,
+      7052,
+      2071,
+      2040,
+      1978,
+      1973,
+      1943,
+      1667
+    ]
+  },
+  {
+    "due": [],
+    "keys": [
+      "L-004",
+      "L-037",
+      "L-029",
+      "D-009",
+      "L-010",
+      "L-021",
+      "I-002",
+      "L-014"
+    ],
+    "query": "readers saw a half built search index during a deploy",
+    "scores": [
+      24027,
+      7024,
+      5319,
+      4884,
+      4884,
+      4884,
+      4414,
+      3973
+    ]
+  },
+  {
+    "due": [],
+    "keys": [
+      "D-002",
+      "N-001",
+      "L-004",
+      "L-005",
+      "L-034",
+      "I-103",
+      "I-104",
+      "L-037"
+    ],
+    "query": "which day of the week do production deploys happen",
+    "scores": [
+      6136,
+      6136,
+      4600,
+      4275,
+      4061,
+      2610,
+      2610,
+      1510
+    ]
+  },
+  {
+    "due": [],
+    "keys": [
+      "L-005",
+      "L-034",
+      "L-021",
+      "L-004",
+      "L-037",
+      "L-019",
+      "I-002",
+      "L-002"
+    ],
+    "query": "feed dates are off by one day for readers in Asia",
+    "scores": [
+      15054,
+      3896,
+      3680,
+      3659,
+      3563,
+      3526,
+      2697,
+      2610
+    ]
+  },
+  {
+    "due": [
+      {
+        "because": [
+          "term:redirect"
+        ],
+        "key": "I-101"
+      }
+    ],
+    "keys": [
+      "L-006",
+      "I-101",
+      "L-028",
+      "L-034",
+      "I-004",
+      "I-104",
+      "N-001",
+      "L-021"
+    ],
+    "query": "link checker says ok but the page redirects to a 404",
+    "scores": [
+      13052,
+      7871,
+      6222,
+      6053,
+      5711,
+      4967,
+      4447,
+      4082
+    ]
+  },
+  {
+    "due": [],
+    "keys": [
+      "L-007",
+      "I-003",
+      "L-001",
+      "L-024",
+      "L-031",
+      "L-006",
+      "I-101",
+      "L-028"
+    ],
+    "query": "pdf export of a big table takes minutes",
+    "scores": [
+      15134,
+      7052,
+      3526,
+      3526,
+      3526,
+      2071,
+      2040,
+      2009
+    ]
+  },
+  {
+    "due": [],
+    "keys": [
+      "L-008",
+      "R-003",
+      "L-041",
+      "L-004",
+      "I-101",
+      "D-004",
+      "L-036",
+      "D-001"
+    ],
+    "query": "changing a layout template does not rebuild the pages",
+    "scores": [
+      13745,
+      4082,
+      3794,
+      3488,
+      3430,
+      2833,
+      2833,
+      2610
+    ]
+  },
+  {
+    "due": [],
+    "keys": [
+      "L-009",
+      "R-004",
+      "L-008",
+      "R-003",
+      "L-041",
+      "L-007",
+      "L-006",
+      "L-028"
+    ],
+    "query": "russian pages full of spelling errors",
+    "scores": [
+      13374,
+      4487,
+      1693,
+      1667,
+      1642,
+      1617,
+      1564,
+      1539
+    ]
+  },
+  {
+    "due": [],
+    "keys": [
+      "L-010",
+      "L-018",
+      "L-031",
+      "L-014",
+      "L-039",
+      "L-005",
+      "L-009",
+      "R-004"
+    ],
+    "query": "draft pages showing up in the sitemap",
+    "scores": [
+      8013,
+      4082,
+      3601,
+      3526,
+      3526,
+      3121,
+      1693,
+      1667
+    ]
+  },
+  {
+    "due": [],
+    "keys": [
+      "L-011",
+      "L-020",
+      "L-034",
+      "R-003",
+      "L-010",
+      "L-009",
+      "L-031",
+      "L-008"
+    ],
+    "query": "upload to storage hits the rate limit",
+    "scores": [
+      17919,
+      6647,
+      6647,
+      4774,
+      1833,
+      1751,
+      1727,
+      1712
+    ]
+  },
+  {
+    "due": [],
+    "keys": [
+      "L-012",
+      "L-009",
+      "L-034",
+      "L-039",
+      "D-001",
+      "D-007",
+      "L-043",
+      "R-002"
+    ],
+    "query": "highlighter crashes on an unknown language in a code block",
+    "scores": [
+      21446,
+      5374,
+      4843,
+      4711,
+      3146,
+      3121,
+      3121,
+      3068
+    ]
+  },
+  {
+    "due": [],
+    "keys": [
+      "L-019",
+      "L-005",
+      "L-012",
+      "L-009",
+      "L-034",
+      "L-011",
+      "L-039",
+      "L-020"
+    ],
+    "query": "last modified date is always today after checkout",
+    "scores": [
+      20570,
+      8281,
+      2071,
+      2040,
+      2009,
+      1978,
+      1978,
+      1806
+    ]
+  },
+  {
+    "due": [],
+    "keys": [
+      "L-023",
+      "L-019",
+      "L-009",
+      "L-040",
+      "L-002",
+      "L-035",
+      "I-002",
+      "I-004"
+    ],
+    "query": "two builds of the same commit produce different output",
+    "scores": [
+      11540,
+      5114,
+      4886,
+      4335,
+      3526,
+      3526,
+      2948,
+      2948
+    ]
+  },
+  {
+    "due": [],
+    "keys": [
+      "L-024",
+      "L-020",
+      "L-041",
+      "R-001",
+      "L-023",
+      "L-019",
+      "L-009",
+      "L-005"
+    ],
+    "query": "diagrams glare white in dark mode",
+    "scores": [
+      19307,
+      4323,
+      3700,
+      3121,
+      1833,
+      1805,
+      1778,
+      1731
+    ]
+  },
+  {
+    "due": [],
+    "keys": [
+      "L-027",
+      "L-012",
+      "L-009",
+      "L-006",
+      "R-004",
+      "L-024",
+      "L-023",
+      "L-019"
+    ],
+    "query": "translations falling behind the english source",
+    "scores": [
+      14798,
+      5811,
+      4819,
+      3526,
+      3526,
+      2071,
+      1978,
+      1957
+    ]
+  },
+  {
+    "due": [],
+    "keys": [
+      "D-008",
+      "I-002",
+      "L-020",
+      "I-004",
+      "D-009",
+      "D-006",
+      "L-034",
+      "L-039"
+    ],
+    "query": "should we put tracking scripts or analytics on the site",
+    "scores": [
+      14240,
+      4011,
+      3482,
+      2759,
+      2557,
+      2274,
+      2274,
+      2274
+    ]
+  },
+  {
+    "due": [],
+    "keys": [
+      "D-009",
+      "L-037",
+      "L-041",
+      "L-017",
+      "L-004",
+      "L-010",
+      "L-021",
+      "I-002"
+    ],
+    "query": "client side search index is too big",
+    "scores": [
+      12508,
+      10327,
+      6599,
+      5641,
+      5082,
+      4884,
+      4884,
+      3948
+    ]
+  },
+  {
+    "due": [],
+    "keys": [
+      "L-039",
+      "L-010",
+      "R-004",
+      "I-003",
+      "L-014",
+      "D-009",
+      "L-037",
+      "L-041"
+    ],
+    "query": "typo in config silently disabled the sitemap",
+    "scores": [
+      18881,
+      5691,
+      4130,
+      3526,
+      3526,
+      2071,
+      2040,
+      2009
+    ]
+  }
+]

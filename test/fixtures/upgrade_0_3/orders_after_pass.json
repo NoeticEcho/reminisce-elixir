@@ -1,0 +1,1808 @@
+[
+  {
+    "audience": null,
+    "due": [
+      {
+        "because": [
+          "time"
+        ],
+        "key": "I-109"
+      },
+      {
+        "because": [
+          "memory:L-001"
+        ],
+        "key": "I-105"
+      }
+    ],
+    "keys": [
+      "L-001",
+      "L-008",
+      "I-003",
+      "L-007",
+      "D-005",
+      "I-104",
+      "I-105",
+      "L-014",
+      "L-034",
+      "L-038",
+      "L-040"
+    ],
+    "query": "why is the pipeline so slow when the dependency cache misses",
+    "scores": [
+      12785,
+      6046,
+      3481,
+      3481,
+      2565,
+      2565,
+      2565,
+      2565,
+      2565,
+      2565,
+      2565
+    ]
+  },
+  {
+    "audience": null,
+    "due": [
+      {
+        "because": [
+          "time"
+        ],
+        "key": "I-109"
+      }
+    ],
+    "keys": [
+      "L-002",
+      "I-109",
+      "L-011",
+      "L-023",
+      "L-043",
+      "D-005",
+      "L-034",
+      "L-039"
+    ],
+    "query": "snapshot tests fail randomly on some runners",
+    "scores": [
+      13114,
+      6557,
+      3481,
+      3481,
+      3481,
+      3076,
+      3076,
+      3076
+    ]
+  },
+  {
+    "audience": null,
+    "due": [
+      {
+        "because": [
+          "time"
+        ],
+        "key": "I-109"
+      }
+    ],
+    "keys": [
+      "L-003",
+      "L-029"
+    ],
+    "query": "worker ran out of memory making thumbnails of a huge photo",
+    "scores": [
+      11136,
+      6962
+    ]
+  },
+  {
+    "audience": null,
+    "due": [
+      {
+        "because": [
+          "time"
+        ],
+        "key": "I-109"
+      }
+    ],
+    "keys": [
+      "L-004",
+      "L-037",
+      "D-009",
+      "L-010",
+      "L-021",
+      "I-002",
+      "L-014",
+      "L-029",
+      "L-017",
+      "L-041",
+      "D-002",
+      "I-103",
+      "I-104",
+      "L-025",
+      "L-005",
+      "L-015",
+      "L-016",
+      "L-018",
+      "L-030"
+    ],
+    "query": "readers saw a half built search index during a deploy",
+    "scores": [
+      23888,
+      6888,
+      4793,
+      4793,
+      4793,
+      4323,
+      3481,
+      3481,
+      3076,
+      3076,
+      2788,
+      2788,
+      2788,
+      2228,
+      2095,
+      2095,
+      2095,
+      2095,
+      2095
+    ]
+  },
+  {
+    "audience": null,
+    "due": [
+      {
+        "because": [
+          "time"
+        ],
+        "key": "I-109"
+      }
+    ],
+    "keys": [
+      "D-002",
+      "L-005",
+      "L-034",
+      "I-103",
+      "I-104",
+      "L-004"
+    ],
+    "query": "which day of the week do production deploys happen",
+    "scores": [
+      6962,
+      3481,
+      3481,
+      2788,
+      2788,
+      2788
+    ]
+  },
+  {
+    "audience": null,
+    "due": [
+      {
+        "because": [
+          "time"
+        ],
+        "key": "I-109"
+      }
+    ],
+    "keys": [
+      "L-005",
+      "L-019",
+      "L-034",
+      "L-002",
+      "L-013",
+      "L-021",
+      "L-027",
+      "R-002",
+      "I-002",
+      "L-004",
+      "L-015",
+      "L-016",
+      "L-018",
+      "L-030",
+      "L-037"
+    ],
+    "query": "feed dates are off by one day for readers in Asia",
+    "scores": [
+      13231,
+      3481,
+      3481,
+      2565,
+      2565,
+      2565,
+      2565,
+      2565,
+      2095,
+      2095,
+      2095,
+      2095,
+      2095,
+      2095,
+      2095
+    ]
+  },
+  {
+    "audience": null,
+    "due": [
+      {
+        "because": [
+          "time"
+        ],
+        "key": "I-109"
+      },
+      {
+        "because": [
+          "term:redirect"
+        ],
+        "key": "I-101"
+      }
+    ],
+    "keys": [
+      "L-006",
+      "I-101",
+      "L-028",
+      "I-004",
+      "I-104",
+      "L-034",
+      "L-009",
+      "L-021",
+      "L-032",
+      "L-022",
+      "D-101",
+      "I-002",
+      "L-007",
+      "L-008",
+      "L-010",
+      "L-013",
+      "L-015",
+      "L-017",
+      "L-018",
+      "L-019",
+      "L-025",
+      "L-027",
+      "L-030",
+      "L-040",
+      "L-041",
+      "R-001",
+      "R-002",
+      "R-003",
+      "R-004"
+    ],
+    "query": "link checker says ok but the page redirects to a 404",
+    "scores": [
+      12826,
+      7736,
+      6087,
+      5576,
+      5090,
+      4660,
+      3481,
+      3011,
+      3011,
+      2095,
+      916,
+      916,
+      916,
+      916,
+      916,
+      916,
+      916,
+      916,
+      916,
+      916,
+      916,
+      916,
+      916,
+      916,
+      916,
+      916,
+      916,
+      916,
+      916
+    ]
+  },
+  {
+    "audience": null,
+    "due": [
+      {
+        "because": [
+          "time"
+        ],
+        "key": "I-109"
+      },
+      {
+        "because": [
+          "memory:L-001"
+        ],
+        "key": "I-105"
+      }
+    ],
+    "keys": [
+      "L-007",
+      "I-003",
+      "L-001",
+      "L-024",
+      "L-031"
+    ],
+    "query": "pdf export of a big table takes minutes",
+    "scores": [
+      14617,
+      6962,
+      3481,
+      3481,
+      3481
+    ]
+  },
+  {
+    "audience": null,
+    "due": [
+      {
+        "because": [
+          "time"
+        ],
+        "key": "I-109"
+      }
+    ],
+    "keys": [
+      "L-008",
+      "R-003",
+      "L-041",
+      "L-004",
+      "D-004",
+      "L-036",
+      "D-001",
+      "I-101",
+      "L-026",
+      "L-038",
+      "D-101",
+      "I-002",
+      "I-004",
+      "I-104",
+      "L-006",
+      "L-007",
+      "L-009",
+      "L-010",
+      "L-013",
+      "L-015",
+      "L-017",
+      "L-018",
+      "L-019",
+      "L-021",
+      "L-025",
+      "L-027",
+      "L-028",
+      "L-030",
+      "L-032",
+      "L-040",
+      "R-001",
+      "R-002",
+      "R-004"
+    ],
+    "query": "changing a layout template does not rebuild the pages",
+    "scores": [
+      13519,
+      3992,
+      3704,
+      3076,
+      2788,
+      2788,
+      2565,
+      2565,
+      2565,
+      2565,
+      916,
+      916,
+      916,
+      916,
+      916,
+      916,
+      916,
+      916,
+      916,
+      916,
+      916,
+      916,
+      916,
+      916,
+      916,
+      916,
+      916,
+      916,
+      916,
+      916,
+      916,
+      916,
+      916
+    ]
+  },
+  {
+    "audience": null,
+    "due": [
+      {
+        "because": [
+          "time"
+        ],
+        "key": "I-109"
+      }
+    ],
+    "keys": [
+      "L-009",
+      "R-004",
+      "D-101",
+      "I-002",
+      "I-004",
+      "I-104",
+      "L-006",
+      "L-007",
+      "L-008",
+      "L-010",
+      "L-013",
+      "L-015",
+      "L-017",
+      "L-018",
+      "L-019",
+      "L-021",
+      "L-025",
+      "L-027",
+      "L-028",
+      "L-030",
+      "L-032",
+      "L-040",
+      "L-041",
+      "R-001",
+      "R-002",
+      "R-003"
+    ],
+    "query": "russian pages full of spelling errors",
+    "scores": [
+      12745,
+      4397,
+      916,
+      916,
+      916,
+      916,
+      916,
+      916,
+      916,
+      916,
+      916,
+      916,
+      916,
+      916,
+      916,
+      916,
+      916,
+      916,
+      916,
+      916,
+      916,
+      916,
+      916,
+      916,
+      916,
+      916
+    ]
+  },
+  {
+    "audience": null,
+    "due": [
+      {
+        "because": [
+          "time"
+        ],
+        "key": "I-109"
+      }
+    ],
+    "keys": [
+      "L-010",
+      "L-018",
+      "L-014",
+      "L-039",
+      "L-005",
+      "L-031",
+      "D-101",
+      "I-002",
+      "I-004",
+      "I-104",
+      "L-006",
+      "L-007",
+      "L-008",
+      "L-009",
+      "L-013",
+      "L-015",
+      "L-017",
+      "L-019",
+      "L-021",
+      "L-025",
+      "L-027",
+      "L-028",
+      "L-030",
+      "L-032",
+      "L-040",
+      "L-041",
+      "R-001",
+      "R-002",
+      "R-003",
+      "R-004"
+    ],
+    "query": "draft pages showing up in the sitemap",
+    "scores": [
+      7878,
+      3992,
+      3481,
+      3481,
+      3076,
+      3076,
+      916,
+      916,
+      916,
+      916,
+      916,
+      916,
+      916,
+      916,
+      916,
+      916,
+      916,
+      916,
+      916,
+      916,
+      916,
+      916,
+      916,
+      916,
+      916,
+      916,
+      916,
+      916,
+      916,
+      916
+    ]
+  },
+  {
+    "audience": null,
+    "due": [
+      {
+        "because": [
+          "time"
+        ],
+        "key": "I-109"
+      }
+    ],
+    "keys": [
+      "L-011",
+      "L-020",
+      "L-034",
+      "R-003"
+    ],
+    "query": "upload to storage hits the rate limit",
+    "scores": [
+      17693,
+      6557,
+      6557,
+      3481
+    ]
+  },
+  {
+    "audience": null,
+    "due": [
+      {
+        "because": [
+          "time"
+        ],
+        "key": "I-109"
+      }
+    ],
+    "keys": [
+      "L-012",
+      "L-009",
+      "L-039",
+      "D-007",
+      "L-043",
+      "D-001",
+      "L-034",
+      "R-002"
+    ],
+    "query": "highlighter crashes on an unknown language in a code block",
+    "scores": [
+      21174,
+      3481,
+      3481,
+      3076,
+      3076,
+      2788,
+      2788,
+      2788
+    ]
+  },
+  {
+    "audience": null,
+    "due": [
+      {
+        "because": [
+          "time"
+        ],
+        "key": "I-109"
+      }
+    ],
+    "keys": [
+      "L-019",
+      "L-005"
+    ],
+    "query": "last modified date is always today after checkout",
+    "scores": [
+      20177,
+      7655
+    ]
+  },
+  {
+    "audience": null,
+    "due": [
+      {
+        "because": [
+          "time"
+        ],
+        "key": "I-109"
+      }
+    ],
+    "keys": [
+      "L-023",
+      "L-040",
+      "L-002",
+      "L-009",
+      "L-019",
+      "L-035",
+      "I-002",
+      "I-004",
+      "L-007",
+      "D-005",
+      "D-009",
+      "I-001",
+      "I-003",
+      "L-004",
+      "L-008",
+      "L-016",
+      "L-017",
+      "L-028",
+      "L-029",
+      "L-041",
+      "R-003"
+    ],
+    "query": "two builds of the same commit produce different output",
+    "scores": [
+      11359,
+      4174,
+      3481,
+      3481,
+      3481,
+      3481,
+      2788,
+      2788,
+      2788,
+      1609,
+      1609,
+      1609,
+      1609,
+      1609,
+      1609,
+      1609,
+      1609,
+      1609,
+      1609,
+      1609,
+      1609
+    ]
+  },
+  {
+    "audience": null,
+    "due": [
+      {
+        "because": [
+          "time"
+        ],
+        "key": "I-109"
+      }
+    ],
+    "keys": [
+      "L-024",
+      "L-020",
+      "L-041",
+      "R-001"
+    ],
+    "query": "diagrams glare white in dark mode",
+    "scores": [
+      19079,
+      3481,
+      3076,
+      3076
+    ]
+  },
+  {
+    "audience": null,
+    "due": [
+      {
+        "because": [
+          "time"
+        ],
+        "key": "I-109"
+      }
+    ],
+    "keys": [
+      "L-027",
+      "L-012",
+      "L-006",
+      "L-009",
+      "R-004"
+    ],
+    "query": "translations falling behind the english source",
+    "scores": [
+      14617,
+      4174,
+      3481,
+      3481,
+      3481
+    ]
+  },
+  {
+    "audience": null,
+    "due": [
+      {
+        "because": [
+          "time"
+        ],
+        "key": "I-109"
+      }
+    ],
+    "keys": [
+      "D-008",
+      "I-002",
+      "D-006",
+      "D-009",
+      "I-004",
+      "L-020",
+      "L-034",
+      "L-039"
+    ],
+    "query": "should we put tracking scripts or analytics on the site",
+    "scores": [
+      14057,
+      3481,
+      2228,
+      2228,
+      2228,
+      2228,
+      2228,
+      2228
+    ]
+  },
+  {
+    "audience": null,
+    "due": [
+      {
+        "because": [
+          "time"
+        ],
+        "key": "I-109"
+      }
+    ],
+    "keys": [
+      "D-009",
+      "L-037",
+      "L-017",
+      "L-041",
+      "L-004",
+      "L-010",
+      "L-021",
+      "R-001",
+      "I-002",
+      "L-025"
+    ],
+    "query": "client side search index is too big",
+    "scores": [
+      10146,
+      10146,
+      5353,
+      5353,
+      4793,
+      4793,
+      4793,
+      2565,
+      2228,
+      2228
+    ]
+  },
+  {
+    "audience": null,
+    "due": [
+      {
+        "because": [
+          "time"
+        ],
+        "key": "I-109"
+      }
+    ],
+    "keys": [
+      "L-039",
+      "I-003",
+      "L-010",
+      "L-014",
+      "R-004"
+    ],
+    "query": "typo in config silently disabled the sitemap",
+    "scores": [
+      18098,
+      3481,
+      3481,
+      3481,
+      3481
+    ]
+  },
+  {
+    "audience": "reader-7",
+    "due": [
+      {
+        "because": [
+          "time"
+        ],
+        "key": "I-109"
+      },
+      {
+        "because": [
+          "memory:L-001"
+        ],
+        "key": "I-105"
+      },
+      {
+        "because": [
+          "audience"
+        ],
+        "key": "I-107"
+      }
+    ],
+    "keys": [
+      "L-001",
+      "L-008",
+      "I-003",
+      "L-007",
+      "D-005",
+      "I-104",
+      "I-105",
+      "L-014",
+      "L-034",
+      "L-038",
+      "L-040"
+    ],
+    "query": "why is the pipeline so slow when the dependency cache misses",
+    "scores": [
+      12847,
+      6077,
+      3497,
+      3497,
+      2580,
+      2580,
+      2580,
+      2580,
+      2580,
+      2580,
+      2580
+    ]
+  },
+  {
+    "audience": "reader-7",
+    "due": [
+      {
+        "because": [
+          "time"
+        ],
+        "key": "I-109"
+      },
+      {
+        "because": [
+          "audience"
+        ],
+        "key": "I-107"
+      }
+    ],
+    "keys": [
+      "L-002",
+      "I-109",
+      "L-011",
+      "L-023",
+      "L-043",
+      "D-005",
+      "L-034",
+      "L-039"
+    ],
+    "query": "snapshot tests fail randomly on some runners",
+    "scores": [
+      13176,
+      6588,
+      3497,
+      3497,
+      3497,
+      3091,
+      3091,
+      3091
+    ]
+  },
+  {
+    "audience": "reader-7",
+    "due": [
+      {
+        "because": [
+          "time"
+        ],
+        "key": "I-109"
+      },
+      {
+        "because": [
+          "audience"
+        ],
+        "key": "I-107"
+      }
+    ],
+    "keys": [
+      "L-003",
+      "L-029"
+    ],
+    "query": "worker ran out of memory making thumbnails of a huge photo",
+    "scores": [
+      11184,
+      6994
+    ]
+  },
+  {
+    "audience": "reader-7",
+    "due": [
+      {
+        "because": [
+          "time"
+        ],
+        "key": "I-109"
+      },
+      {
+        "because": [
+          "audience"
+        ],
+        "key": "I-107"
+      }
+    ],
+    "keys": [
+      "L-004",
+      "L-037",
+      "D-009",
+      "L-010",
+      "L-021",
+      "I-002",
+      "L-014",
+      "L-029",
+      "L-017",
+      "L-041",
+      "D-002",
+      "I-103",
+      "I-104",
+      "L-025",
+      "I-107",
+      "L-005",
+      "L-015",
+      "L-016",
+      "L-018",
+      "L-030"
+    ],
+    "query": "readers saw a half built search index during a deploy",
+    "scores": [
+      23894,
+      6816,
+      4824,
+      4824,
+      4824,
+      4236,
+      3497,
+      3497,
+      3091,
+      3091,
+      2803,
+      2803,
+      2803,
+      2244,
+      1992,
+      1992,
+      1992,
+      1992,
+      1992,
+      1992
+    ]
+  },
+  {
+    "audience": "reader-7",
+    "due": [
+      {
+        "because": [
+          "time"
+        ],
+        "key": "I-109"
+      },
+      {
+        "because": [
+          "audience"
+        ],
+        "key": "I-107"
+      }
+    ],
+    "keys": [
+      "D-002",
+      "L-005",
+      "L-034",
+      "I-103",
+      "I-104",
+      "L-004"
+    ],
+    "query": "which day of the week do production deploys happen",
+    "scores": [
+      6993,
+      3497,
+      3497,
+      2803,
+      2803,
+      2803
+    ]
+  },
+  {
+    "audience": "reader-7",
+    "due": [
+      {
+        "because": [
+          "time"
+        ],
+        "key": "I-109"
+      },
+      {
+        "because": [
+          "audience"
+        ],
+        "key": "I-107"
+      }
+    ],
+    "keys": [
+      "L-005",
+      "I-107",
+      "L-034",
+      "L-019",
+      "L-002",
+      "L-013",
+      "L-021",
+      "L-027",
+      "R-002",
+      "I-002",
+      "L-004",
+      "L-015",
+      "L-016",
+      "L-018",
+      "L-030",
+      "L-037"
+    ],
+    "query": "feed dates are off by one day for readers in Asia",
+    "scores": [
+      12077,
+      8580,
+      3497,
+      3091,
+      2580,
+      2580,
+      2580,
+      2580,
+      2580,
+      1992,
+      1992,
+      1992,
+      1992,
+      1992,
+      1992,
+      1992
+    ]
+  },
+  {
+    "audience": "reader-7",
+    "due": [
+      {
+        "because": [
+          "time"
+        ],
+        "key": "I-109"
+      },
+      {
+        "because": [
+          "term:redirect"
+        ],
+        "key": "I-101"
+      },
+      {
+        "because": [
+          "audience"
+        ],
+        "key": "I-107"
+      }
+    ],
+    "keys": [
+      "L-006",
+      "I-101",
+      "L-028",
+      "I-004",
+      "I-104",
+      "L-034",
+      "L-009",
+      "L-021",
+      "L-032",
+      "L-022",
+      "D-101",
+      "I-002",
+      "L-007",
+      "L-008",
+      "L-010",
+      "L-013",
+      "L-015",
+      "L-017",
+      "L-018",
+      "L-019",
+      "L-025",
+      "L-027",
+      "L-030",
+      "L-040",
+      "L-041",
+      "R-001",
+      "R-002",
+      "R-003",
+      "R-004"
+    ],
+    "query": "link checker says ok but the page redirects to a 404",
+    "scores": [
+      12903,
+      7781,
+      6133,
+      5622,
+      5122,
+      4690,
+      3512,
+      3042,
+      3042,
+      2110,
+      932,
+      932,
+      932,
+      932,
+      932,
+      932,
+      932,
+      932,
+      932,
+      932,
+      932,
+      932,
+      932,
+      932,
+      932,
+      932,
+      932,
+      932,
+      932
+    ]
+  },
+  {
+    "audience": "reader-7",
+    "due": [
+      {
+        "because": [
+          "time"
+        ],
+        "key": "I-109"
+      },
+      {
+        "because": [
+          "memory:L-001"
+        ],
+        "key": "I-105"
+      },
+      {
+        "because": [
+          "audience"
+        ],
+        "key": "I-107"
+      }
+    ],
+    "keys": [
+      "L-007",
+      "I-003",
+      "L-001",
+      "L-024",
+      "L-031"
+    ],
+    "query": "pdf export of a big table takes minutes",
+    "scores": [
+      14681,
+      6994,
+      3497,
+      3497,
+      3497
+    ]
+  },
+  {
+    "audience": "reader-7",
+    "due": [
+      {
+        "because": [
+          "time"
+        ],
+        "key": "I-109"
+      },
+      {
+        "because": [
+          "audience"
+        ],
+        "key": "I-107"
+      }
+    ],
+    "keys": [
+      "L-008",
+      "R-003",
+      "L-041",
+      "L-004",
+      "D-004",
+      "L-036",
+      "D-001",
+      "I-101",
+      "L-026",
+      "L-038",
+      "D-101",
+      "I-002",
+      "I-004",
+      "I-104",
+      "L-006",
+      "L-007",
+      "L-009",
+      "L-010",
+      "L-013",
+      "L-015",
+      "L-017",
+      "L-018",
+      "L-019",
+      "L-021",
+      "L-025",
+      "L-027",
+      "L-028",
+      "L-030",
+      "L-032",
+      "L-040",
+      "R-001",
+      "R-002",
+      "R-004"
+    ],
+    "query": "changing a layout template does not rebuild the pages",
+    "scores": [
+      13596,
+      4023,
+      3735,
+      3091,
+      2803,
+      2803,
+      2580,
+      2580,
+      2580,
+      2580,
+      932,
+      932,
+      932,
+      932,
+      932,
+      932,
+      932,
+      932,
+      932,
+      932,
+      932,
+      932,
+      932,
+      932,
+      932,
+      932,
+      932,
+      932,
+      932,
+      932,
+      932,
+      932,
+      932
+    ]
+  },
+  {
+    "audience": "reader-7",
+    "due": [
+      {
+        "because": [
+          "time"
+        ],
+        "key": "I-109"
+      },
+      {
+        "because": [
+          "audience"
+        ],
+        "key": "I-107"
+      }
+    ],
+    "keys": [
+      "L-009",
+      "R-004",
+      "D-101",
+      "I-002",
+      "I-004",
+      "I-104",
+      "L-006",
+      "L-007",
+      "L-008",
+      "L-010",
+      "L-013",
+      "L-015",
+      "L-017",
+      "L-018",
+      "L-019",
+      "L-021",
+      "L-025",
+      "L-027",
+      "L-028",
+      "L-030",
+      "L-032",
+      "L-040",
+      "L-041",
+      "R-001",
+      "R-002",
+      "R-003"
+    ],
+    "query": "russian pages full of spelling errors",
+    "scores": [
+      12809,
+      4429,
+      932,
+      932,
+      932,
+      932,
+      932,
+      932,
+      932,
+      932,
+      932,
+      932,
+      932,
+      932,
+      932,
+      932,
+      932,
+      932,
+      932,
+      932,
+      932,
+      932,
+      932,
+      932,
+      932,
+      932
+    ]
+  },
+  {
+    "audience": "reader-7",
+    "due": [
+      {
+        "because": [
+          "time"
+        ],
+        "key": "I-109"
+      },
+      {
+        "because": [
+          "audience"
+        ],
+        "key": "I-107"
+      }
+    ],
+    "keys": [
+      "L-010",
+      "L-018",
+      "L-014",
+      "L-039",
+      "L-005",
+      "L-031",
+      "D-101",
+      "I-002",
+      "I-004",
+      "I-104",
+      "L-006",
+      "L-007",
+      "L-008",
+      "L-009",
+      "L-013",
+      "L-015",
+      "L-017",
+      "L-019",
+      "L-021",
+      "L-025",
+      "L-027",
+      "L-028",
+      "L-030",
+      "L-032",
+      "L-040",
+      "L-041",
+      "R-001",
+      "R-002",
+      "R-003",
+      "R-004"
+    ],
+    "query": "draft pages showing up in the sitemap",
+    "scores": [
+      7926,
+      4023,
+      3497,
+      3497,
+      3091,
+      3091,
+      932,
+      932,
+      932,
+      932,
+      932,
+      932,
+      932,
+      932,
+      932,
+      932,
+      932,
+      932,
+      932,
+      932,
+      932,
+      932,
+      932,
+      932,
+      932,
+      932,
+      932,
+      932,
+      932,
+      932
+    ]
+  },
+  {
+    "audience": "reader-7",
+    "due": [
+      {
+        "because": [
+          "time"
+        ],
+        "key": "I-109"
+      },
+      {
+        "because": [
+          "audience"
+        ],
+        "key": "I-107"
+      }
+    ],
+    "keys": [
+      "L-011",
+      "L-020",
+      "L-034",
+      "R-003"
+    ],
+    "query": "upload to storage hits the rate limit",
+    "scores": [
+      17772,
+      6588,
+      6588,
+      3497
+    ]
+  },
+  {
+    "audience": "reader-7",
+    "due": [
+      {
+        "because": [
+          "time"
+        ],
+        "key": "I-109"
+      },
+      {
+        "because": [
+          "audience"
+        ],
+        "key": "I-107"
+      }
+    ],
+    "keys": [
+      "L-012",
+      "L-009",
+      "L-039",
+      "D-007",
+      "L-043",
+      "D-001",
+      "L-034",
+      "R-002"
+    ],
+    "query": "highlighter crashes on an unknown language in a code block",
+    "scores": [
+      21268,
+      3497,
+      3497,
+      3091,
+      3091,
+      2803,
+      2803,
+      2803
+    ]
+  },
+  {
+    "audience": "reader-7",
+    "due": [
+      {
+        "because": [
+          "time"
+        ],
+        "key": "I-109"
+      },
+      {
+        "because": [
+          "audience"
+        ],
+        "key": "I-107"
+      }
+    ],
+    "keys": [
+      "L-019",
+      "L-005",
+      "I-107"
+    ],
+    "query": "last modified date is always today after checkout",
+    "scores": [
+      19851,
+      7281,
+      3091
+    ]
+  },
+  {
+    "audience": "reader-7",
+    "due": [
+      {
+        "because": [
+          "time"
+        ],
+        "key": "I-109"
+      },
+      {
+        "because": [
+          "audience"
+        ],
+        "key": "I-107"
+      }
+    ],
+    "keys": [
+      "L-023",
+      "L-040",
+      "L-002",
+      "L-009",
+      "L-019",
+      "L-035",
+      "I-002",
+      "I-004",
+      "L-007",
+      "D-005",
+      "D-009",
+      "I-001",
+      "I-003",
+      "L-004",
+      "L-008",
+      "L-016",
+      "L-017",
+      "L-028",
+      "L-029",
+      "L-041",
+      "R-003"
+    ],
+    "query": "two builds of the same commit produce different output",
+    "scores": [
+      11422,
+      4190,
+      3497,
+      3497,
+      3497,
+      3497,
+      2803,
+      2803,
+      2803,
+      1625,
+      1625,
+      1625,
+      1625,
+      1625,
+      1625,
+      1625,
+      1625,
+      1625,
+      1625,
+      1625,
+      1625
+    ]
+  },
+  {
+    "audience": "reader-7",
+    "due": [
+      {
+        "because": [
+          "time"
+        ],
+        "key": "I-109"
+      },
+      {
+        "because": [
+          "audience"
+        ],
+        "key": "I-107"
+      }
+    ],
+    "keys": [
+      "L-024",
+      "L-020",
+      "L-041",
+      "R-001"
+    ],
+    "query": "diagrams glare white in dark mode",
+    "scores": [
+      19158,
+      3497,
+      3091,
+      3091
+    ]
+  },
+  {
+    "audience": "reader-7",
+    "due": [
+      {
+        "because": [
+          "time"
+        ],
+        "key": "I-109"
+      },
+      {
+        "because": [
+          "audience"
+        ],
+        "key": "I-107"
+      }
+    ],
+    "keys": [
+      "L-027",
+      "L-012",
+      "L-006",
+      "L-009",
+      "R-004"
+    ],
+    "query": "translations falling behind the english source",
+    "scores": [
+      14681,
+      4190,
+      3497,
+      3497,
+      3497
+    ]
+  },
+  {
+    "audience": "reader-7",
+    "due": [
+      {
+        "because": [
+          "time"
+        ],
+        "key": "I-109"
+      },
+      {
+        "because": [
+          "audience"
+        ],
+        "key": "I-107"
+      }
+    ],
+    "keys": [
+      "D-008",
+      "I-002",
+      "D-006",
+      "D-009",
+      "I-004",
+      "L-020",
+      "L-034",
+      "L-039"
+    ],
+    "query": "should we put tracking scripts or analytics on the site",
+    "scores": [
+      14121,
+      3497,
+      2244,
+      2244,
+      2244,
+      2244,
+      2244,
+      2244
+    ]
+  },
+  {
+    "audience": "reader-7",
+    "due": [
+      {
+        "because": [
+          "time"
+        ],
+        "key": "I-109"
+      },
+      {
+        "because": [
+          "audience"
+        ],
+        "key": "I-107"
+      }
+    ],
+    "keys": [
+      "D-009",
+      "L-037",
+      "L-017",
+      "L-041",
+      "L-004",
+      "L-010",
+      "L-021",
+      "R-001",
+      "I-002",
+      "L-025"
+    ],
+    "query": "client side search index is too big",
+    "scores": [
+      10207,
+      10207,
+      5383,
+      5383,
+      4824,
+      4824,
+      4824,
+      2580,
+      2244,
+      2244
+    ]
+  },
+  {
+    "audience": "reader-7",
+    "due": [
+      {
+        "because": [
+          "time"
+        ],
+        "key": "I-109"
+      },
+      {
+        "because": [
+          "audience"
+        ],
+        "key": "I-107"
+      }
+    ],
+    "keys": [
+      "L-039",
+      "I-003",
+      "L-010",
+      "L-014",
+      "R-004"
+    ],
+    "query": "typo in config silently disabled the sitemap",
+    "scores": [
+      18178,
+      3497,
+      3497,
+      3497,
+      3497
+    ]
+  }
+]

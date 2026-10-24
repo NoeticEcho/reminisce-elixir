@@ -2,7 +2,8 @@
 # SPDX-License-Identifier: Apache-2.0
 
 defmodule Reminisce.MCP.OSProcessTest do
-  # `mix reminisce.mcp` as a real OS process: stdout carries JSON-RPC and
+  # The MCP server as a real OS process (`mix reminisce.mcp`, or the release
+  # when REMINISCE_MCP_SERVER names it): stdout carries JSON-RPC and
   # nothing else, and logs reach stderr.
   use ExUnit.Case, async: false
 
@@ -46,12 +47,13 @@ defmodule Reminisce.MCP.OSProcessTest do
         "sh",
         [
           "-c",
-          ~s(printf '%s' "$MCP_INPUT" | mix reminisce.mcp --owner agent:os --database "$MCP_DB" 2>"$MCP_ERR")
+          ~s(printf '%s' "$MCP_INPUT" | $MCP_SERVER --owner agent:os --database "$MCP_DB" 2>"$MCP_ERR")
         ],
         env: [
           {"MCP_INPUT", input},
           {"MCP_DB", db},
           {"MCP_ERR", err},
+          {"MCP_SERVER", Reminisce.MCPServer.command()},
           {"MIX_ENV", "test"},
           {"TYPEDB_URL", System.get_env("TYPEDB_URL", "http://127.0.0.1:8000")},
           {"TYPEDB_PASSWORD", System.get_env("TYPEDB_PASSWORD", "password")}
@@ -79,6 +81,54 @@ defmodule Reminisce.MCP.OSProcessTest do
     assert stderr =~ "reminisce MCP server"
   end
 
+  # A refused login: the server stops before it reads a request. Nothing but
+  # JSON-RPC may reach stdout on the way (a log written before the handler
+  # moved to stderr would), and the password reaches neither stream: not in
+  # the driver's error, not in a crash report.
+  test "a refused password ends the server, and is on neither stream" do
+    db = "t_os_" <> (:crypto.strong_rand_bytes(5) |> Base.encode16(case: :lower))
+    on_exit(fn -> TypeDB.Database.delete(TypeDB, db) end)
+    err = Path.join(System.tmp_dir!(), db <> ".stderr")
+    wrong = "refused-" <> (:crypto.strong_rand_bytes(9) |> Base.encode16(case: :lower))
+
+    {out, status} =
+      System.cmd(
+        "sh",
+        [
+          "-c",
+          ~s(printf '%s\\n' "$MCP_INPUT" | $MCP_SERVER --owner agent:os --database "$MCP_DB" 2>"$MCP_ERR")
+        ],
+        env: [
+          {"MCP_INPUT",
+           Jason.encode!(%{
+             "jsonrpc" => "2.0",
+             "id" => 1,
+             "method" => "initialize",
+             "params" => %{}
+           })},
+          {"MCP_DB", db},
+          {"MCP_ERR", err},
+          {"MCP_SERVER", Reminisce.MCPServer.command()},
+          {"MIX_ENV", "test"},
+          {"TYPEDB_URL", System.get_env("TYPEDB_URL", "http://127.0.0.1:8000")},
+          {"TYPEDB_PASSWORD", wrong}
+        ]
+      )
+
+    stderr = File.read!(err)
+    assert status != 0, stderr
+
+    for line <- String.split(out, "\n", trim: true) do
+      assert {:ok, %{"jsonrpc" => "2.0"}} = Jason.decode(line),
+             "not JSON-RPC on stdout: #{inspect(line)}"
+    end
+
+    refute out =~ wrong
+    refute stderr =~ wrong
+    refute stderr =~ Base.encode64(wrong)
+    assert stderr =~ "reminisce-mcp:" or stderr =~ "** (Mix)", stderr
+  end
+
   # A live client: stdin stays open after each request, and the reply must
   # come within a second of it. The test above feeds all input then EOF,
   # which is not how an MCP client talks.
@@ -94,11 +144,12 @@ defmodule Reminisce.MCP.OSProcessTest do
         {:line, 1_000_000},
         args: [
           "-c",
-          ~s(exec mix reminisce.mcp --owner agent:live --database "$MCP_DB" 2>"$MCP_ERR")
+          ~s(exec $MCP_SERVER --owner agent:live --database "$MCP_DB" 2>"$MCP_ERR")
         ],
         env: [
           {~c"MCP_DB", String.to_charlist(db)},
           {~c"MCP_ERR", String.to_charlist(err)},
+          {~c"MCP_SERVER", String.to_charlist(Reminisce.MCPServer.command())},
           {~c"MIX_ENV", ~c"test"},
           {~c"TYPEDB_URL",
            String.to_charlist(System.get_env("TYPEDB_URL", "http://127.0.0.1:8000"))},

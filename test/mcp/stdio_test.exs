@@ -2,7 +2,8 @@
 # SPDX-License-Identifier: Apache-2.0
 
 defmodule Reminisce.MCP.StdioTest do
-  # `mix reminisce.mcp` as a real OS process, fed through a real pipe or file:
+  # The MCP server as a real OS process (`mix reminisce.mcp`, or the release
+  # when REMINISCE_MCP_SERVER names it), fed through a real pipe or file:
   # what goes in as bytes comes back as the same bytes, whatever the locale; a
   # line never costs more memory than the cap, however long it is; the four
   # odd line shapes are answered; and input that cannot be read is an error,
@@ -20,6 +21,7 @@ defmodule Reminisce.MCP.StdioTest do
     [
       {"MCP_DB", db},
       {"MCP_ERR", err},
+      {"MCP_SERVER", Reminisce.MCPServer.command()},
       {"MIX_ENV", "test"},
       {"LANG", lang},
       {"LC_ALL", lang},
@@ -40,7 +42,7 @@ defmodule Reminisce.MCP.StdioTest do
         {:line, 16 * @mib},
         args: [
           "-c",
-          ~s(exec mix reminisce.mcp --owner agent:stdio --database "$MCP_DB" 2>"$MCP_ERR")
+          ~s(exec $MCP_SERVER --owner agent:stdio --database "$MCP_DB" 2>"$MCP_ERR")
         ],
         env: for({k, v} <- env(db, err, lang), do: {String.to_charlist(k), String.to_charlist(v)})
       ])
@@ -178,48 +180,136 @@ defmodule Reminisce.MCP.StdioTest do
     end
   end
 
+  # -- a server stalled writing ------------------------------------------------
+
+  # Three processes in a pipe: `feed` writes the client's lines, the server
+  # answers them, and a reader passes on the first reply (initialize's) and
+  # then reads nothing until $MCP_DRAIN exists, so the server's stdout fills
+  # and it blocks writing. The feed waits for $MCP_GO after its first line,
+  # and creates $MCP_FLOODED once it has written what it meant to stall on.
+  @serve ~S"""
+  echo $$ > "$MCP_PID"
+  exec $MCP_SERVER --owner "$MCP_OWNER" --database "$MCP_DB" 2>"$MCP_ERR"
+  """
+
+  @drain ~S"""
+  IFS= read -r first
+  printf '%s\n' "$first"
+  while [ ! -e "$MCP_DRAIN" ]; do sleep 0.1; done
+  exec cat
+  """
+
+  defp stalled(feed, owner) do
+    db = db()
+    tmp = Path.join(System.tmp_dir!(), db)
+    err = tmp <> ".stderr"
+    files = for f <- ~w(go drain flooded pid)a, into: %{}, do: {f, "#{tmp}.#{f}"}
+
+    vars = [
+      {"MCP_GO", files.go},
+      {"MCP_DRAIN", files.drain},
+      {"MCP_FLOODED", files.flooded},
+      {"MCP_PID", files.pid},
+      {"MCP_OWNER", owner},
+      {"MCP_FEED", feed},
+      {"MCP_SERVE", @serve},
+      {"MCP_READ", @drain}
+      | env(db, err, "C.UTF-8")
+    ]
+
+    port =
+      Port.open({:spawn_executable, System.find_executable("sh")}, [
+        :binary,
+        :exit_status,
+        {:line, @mib},
+        args: [
+          "-c",
+          ~s(exec 2>/dev/null; sh -c "$MCP_FEED" | sh -c "$MCP_SERVE" | sh -c "$MCP_READ")
+        ],
+        env: for({k, v} <- vars, do: {String.to_charlist(k), String.to_charlist(v)})
+      ])
+
+    {:os_pid, sh} = Port.info(port, :os_pid)
+
+    on_exit(fn ->
+      System.cmd("pkill", ["-9", "-P", Integer.to_string(sh)], stderr_to_stdout: true)
+
+      with {:ok, pid} <- File.read(files.pid),
+           do: System.cmd("kill", ["-9", String.trim(pid)], stderr_to_stdout: true)
+
+      Enum.each(Map.values(files), &File.rm/1)
+      TypeDB.Database.delete(TypeDB, db)
+    end)
+
+    server = %{port: port, err: err}
+    assert %{"id" => 0, "result" => %{"serverInfo" => _}} = await(server, 120_000)
+    %{server: server, files: files, pid: files.pid |> File.read!() |> String.trim()}
+  end
+
   describe "a client that sends faster than the server answers" do
-    # 96 lines of about a MiB each, sent at once: the reader stops reading
-    # once 4 MiB of lines wait for an answer, and goes on when the server has
-    # caught up, so the backlog stays in the pipe, not in the server. Every
-    # line is answered, in order. A server that read ahead would grow by the
-    # backlog (42 MiB for 40 MiB queued, measured); this one grew by 18 to
-    # 32 MiB in the runs measured for this release, most of it answered lines
-    # the VM has not yet collected. It fails at 48 MiB, as the README says.
-    test "is answered in order, with the backlog left in the pipe" do
-      server = start("C.UTF-8")
-      initialize(server)
+    # 96 lines of about a MiB each, sent to a server that is stalled writing:
+    # the client reads no replies until told to, so 64 tools/list replies
+    # (about 300 KiB) fill stdout and the server blocks. The reader then stops
+    # once more than 4 MiB of lines wait for an answer, and the rest stays in
+    # the pipe: the writer of the backlog is still blocked when the test
+    # looks, and the server has read (/proc's rchar) a few MiB of the 96. A
+    # reader that read ahead would hold the whole backlog in the server, and
+    # the writer would be done. What the stalled server reads is set by its
+    # bounds, not by the machine's load or the collector, so it is the
+    # measure: it read 4 to 5 MiB in the runs measured for this release, and the
+    # test fails at 16 MiB, as the README says. Then every line is answered,
+    # in order.
+    @backlog ~S"""
+    printf '%s\n' '{"jsonrpc":"2.0","id":0,"method":"initialize","params":{}}'
+    while [ ! -e "$MCP_GO" ]; do sleep 0.1; done
+    i=1
+    while [ $i -le 64 ]; do
+      printf '{"jsonrpc":"2.0","id":"list-%d","method":"tools/list"}\n' $i
+      i=$((i + 1))
+    done
+    pad=$(head -c 1000000 /dev/zero | tr '\000' 'y')
+    i=1
+    while [ $i -le 96 ]; do
+      printf '{"jsonrpc":"2.0","id":%d,"method":"ping","params":{"pad":"%s"}}\n' $i "$pad"
+      i=$((i + 1))
+    done
+    : > "$MCP_FLOODED"
+    printf '%s\n' '{"jsonrpc":"2.0","id":"last","method":"ping"}'
+    exec sleep 600
+    """
 
-      send_msg(server, %{"jsonrpc" => "2.0", "id" => 1, "method" => "ping"})
-      assert %{"id" => 1} = await(server)
-      before = rss_kib(server.pid)
+    test "leaves the backlog in the pipe, then answers every line in order" do
+      %{server: server, files: files, pid: pid} = stalled(@backlog, "agent:backlog")
+      before = read_bytes(pid)
+      File.write!(files.go, "")
 
-      pad = String.duplicate("y", 1_000_000)
+      # Long enough for a reader that never pauses to take in the whole
+      # backlog several times over.
+      Process.sleep(15_000)
+      refute File.exists?(files.flooded), "the reader took in the whole backlog"
+      read = read_bytes(pid)
+      held = peak_kib(pid)
 
-      lines =
-        for id <- 2..97 do
-          Jason.encode!(%{
-            "jsonrpc" => "2.0",
-            "id" => id,
-            "method" => "ping",
-            "params" => %{"pad" => pad}
-          }) <> "\n"
-        end
+      File.write!(files.drain, "")
 
-      send_bytes(server, IO.iodata_to_binary(lines))
-
-      for id <- 2..97 do
-        assert %{"id" => ^id, "result" => %{}} = await(server, 30_000)
+      for i <- 1..64 do
+        id = "list-#{i}"
+        assert %{"id" => ^id, "result" => %{"tools" => _}} = await(server, 60_000)
       end
 
-      case {before, peak_kib(server.pid)} do
-        {nil, _} ->
-          IO.puts("memory of the OS process: unavailable here (no /proc), not checked")
+      for id <- 1..96, do: assert(%{"id" => ^id, "result" => %{}} = await(server, 60_000))
+      assert %{"id" => "last", "result" => %{}} = await(server, 120_000)
+      assert File.exists?(files.flooded)
 
-        {before, peak} ->
-          grew = peak - before
-          IO.puts("\n  backlog: the server grew by #{div(grew, 1024)} MiB for 96 MiB queued")
-          assert grew < 48 * 1024, "the server grew by #{div(grew, 1024)} MiB for 96 MiB queued"
+      case {before, read} do
+        {nil, _} ->
+          IO.puts("bytes read by the OS process: unavailable here (no /proc), not checked")
+
+        {before, read} ->
+          took = read - before
+          IO.puts("\n  backlog: the stalled server read #{div(took, @mib)} MiB of 96 MiB queued")
+          if held, do: IO.puts("  (its peak resident size was #{div(held, 1024)} MiB)")
+          assert took < 16 * @mib, "the stalled server read #{div(took, @mib)} MiB of 96 MiB"
       end
 
       Port.close(server.port)
@@ -252,62 +342,8 @@ defmodule Reminisce.MCP.StdioTest do
     exec sleep 600
     """
 
-    @serve ~S"""
-    echo $$ > "$MCP_PID"
-    exec mix reminisce.mcp --owner agent:flood --database "$MCP_DB" 2>"$MCP_ERR"
-    """
-
-    @drain ~S"""
-    IFS= read -r first
-    printf '%s\n' "$first"
-    while [ ! -e "$MCP_DRAIN" ]; do sleep 0.1; done
-    exec cat
-    """
-
     test "pauses the reader, and every message is answered once the client reads" do
-      db = db()
-      tmp = Path.join(System.tmp_dir!(), db)
-      err = tmp <> ".stderr"
-      files = for f <- ~w(go drain flooded pid)a, into: %{}, do: {f, "#{tmp}.#{f}"}
-
-      vars = [
-        {"MCP_GO", files.go},
-        {"MCP_DRAIN", files.drain},
-        {"MCP_FLOODED", files.flooded},
-        {"MCP_PID", files.pid},
-        {"MCP_FEED", @feed},
-        {"MCP_SERVE", @serve},
-        {"MCP_READ", @drain}
-        | env(db, err, "C.UTF-8")
-      ]
-
-      port =
-        Port.open({:spawn_executable, System.find_executable("sh")}, [
-          :binary,
-          :exit_status,
-          {:line, @mib},
-          args: [
-            "-c",
-            ~s(exec 2>/dev/null; sh -c "$MCP_FEED" | sh -c "$MCP_SERVE" | sh -c "$MCP_READ")
-          ],
-          env: for({k, v} <- vars, do: {String.to_charlist(k), String.to_charlist(v)})
-        ])
-
-      {:os_pid, sh} = Port.info(port, :os_pid)
-
-      on_exit(fn ->
-        System.cmd("pkill", ["-9", "-P", Integer.to_string(sh)], stderr_to_stdout: true)
-
-        with {:ok, pid} <- File.read(files.pid),
-             do: System.cmd("kill", ["-9", String.trim(pid)], stderr_to_stdout: true)
-
-        Enum.each(Map.values(files), &File.rm/1)
-        TypeDB.Database.delete(TypeDB, db)
-      end)
-
-      server = %{port: port, err: err}
-      assert %{"id" => 0, "result" => %{"serverInfo" => _}} = await(server, 120_000)
-      pid = files.pid |> File.read!() |> String.trim()
+      %{server: server, files: files, pid: pid} = stalled(@feed, "agent:flood")
       before = rss_kib(pid)
 
       File.write!(files.go, "")
@@ -337,13 +373,26 @@ defmodule Reminisce.MCP.StdioTest do
           assert grew < 16 * 1024, "the stalled server grew by #{div(grew, 1024)} MiB"
       end
 
-      Port.close(port)
+      Port.close(server.port)
     end
   end
 
   # /proc is Linux's; elsewhere the memory check reports itself unavailable.
   defp rss_kib(pid), do: proc_status(pid, "VmRSS")
   defp peak_kib(pid), do: proc_status(pid, "VmHWM")
+
+  # The bytes the process has read through read(2) and pread(2), its pipe
+  # among them.
+  defp read_bytes(pid) do
+    case File.read("/proc/#{pid}/io") do
+      {:ok, text} ->
+        [_, n] = Regex.run(~r/^rchar:\s+(\d+)$/m, text)
+        String.to_integer(n)
+
+      {:error, _} ->
+        nil
+    end
+  end
 
   defp proc_status(pid, field) do
     case File.read("/proc/#{pid}/status") do
@@ -402,7 +451,7 @@ defmodule Reminisce.MCP.StdioTest do
             [
               "-c",
               prefix <>
-                ~s(mix reminisce.mcp --owner agent:shapes --database "$MCP_DB" 2>"$MCP_ERR" ) <>
+                ~s($MCP_SERVER --owner agent:shapes --database "$MCP_DB" 2>"$MCP_ERR" ) <>
                 feed
             ],
             env: [{"MCP_IN", input} | env(db, err, "C.UTF-8")]
@@ -431,7 +480,7 @@ defmodule Reminisce.MCP.StdioTest do
       {out, status} =
         System.cmd(
           "sh",
-          ["-c", ~s(mix reminisce.mcp --owner agent:dir --database "$MCP_DB" 2>"$MCP_ERR" < /)],
+          ["-c", ~s($MCP_SERVER --owner agent:dir --database "$MCP_DB" 2>"$MCP_ERR" < /)],
           env: env(db, err, "C.UTF-8")
         )
 

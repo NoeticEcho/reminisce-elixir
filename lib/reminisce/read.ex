@@ -5,7 +5,7 @@ defmodule Reminisce.Read do
   @moduledoc false
   # Loading memories, recall and as_of.
 
-  alias Reminisce.{DB, Memory, Store, Write}
+  alias Reminisce.{DB, Due, Focus, Keys, Memory, Score, Store, Write}
 
   @max_k 50
 
@@ -77,8 +77,16 @@ defmodule Reminisce.Read do
              $p has memory_key $v;
            select $k, $v;
            """),
-         {:ok, subjects} <- subjects(store, rows) do
-      links = %{sources: sources, derived_from: parents, subjects: subjects}
+         {:ok, subjects} <- subjects(store, rows),
+         {:ok, objects} <-
+           pairs(store, rows, """
+           given $k: string;
+           match $m isa memory, has memory_key == $k; (feeling: $m, object: $o) isa affect;
+             $o has memory_key $v;
+           select $k, $v;
+           """) do
+      objects = Map.new(objects, fn {k, [v | _]} -> {k, v} end)
+      links = %{sources: sources, derived_from: parents, subjects: subjects, objects: objects}
 
       by_key =
         Map.new(docs, fn %{"m" => doc} -> {doc["memory_key"], Memory.from_doc(doc, links)} end)
@@ -243,6 +251,22 @@ defmodule Reminisce.Read do
 
   # -- recall ------------------------------------------------------------------
 
+  # One recall is one turn of its focus, in a fixed order (docs/spec.md §A.5):
+  # the focus fades; the memories are scored against the query and that
+  # faded focus; the turn's cues come in and the focus is bounded (the focus
+  # answered); the due list is evaluated against it; and the intentions
+  # surfaced join it. A recall given no focus runs the same steps from an
+  # empty one.
+  #
+  # `opts[:guards_off]` is a set of test seams, each taking out one guard so a
+  # test can show that guard is what holds: the due list's (Reminisce.Due),
+  # `:focus_cap`, `:focus_reset` and `:bound`; `:contradiction`, the rule of
+  # the affect's multiplier and the DNA's lift across a standing contradiction
+  # (§B.3, §C.4); and `:persona_focus`, the DNA's rule that what the focus
+  # alone scores is not lifted. `Reminisce.recall/4` never passes it on.
+  @seams ~w(surfaced not_before expiry audience due_bases active focus_cap focus_reset bound
+            contradiction persona_focus)a
+
   def recall(%Store{} = store, owner, query, opts) do
     with :ok <- Reminisce.Limits.check(:query, if(is_binary(query), do: query)),
          :ok <- Reminisce.Limits.check(:subject, opts[:subject]),
@@ -257,57 +281,352 @@ defmodule Reminisce.Read do
              do: :ok,
              else: {:error, {:invalid, :subject}}
            ),
-         walk_opts = [subject: opts[:subject], as_of: as_of],
-         {:ok, ranked, scanned, similarity} <-
-           rank(store, owner, query, k, aspects, opts[:similarity], walk_opts),
-         {:ok, memories} <- load(store, Enum.map(ranked, &elem(&1, 0))) do
-      scores = Map.new(ranked, fn {key, score} -> {Reminisce.Keys.local(owner, key), score} end)
+         {:ok, events} <- events(opts[:events]),
+         {:ok, due_k} <- due_k(opts[:due_k]),
+         {:ok, all?} <- due_mode(opts[:due]),
+         {:ok, focus} <- focus(opts[:focus]),
+         {:ok, off} <- seams(opts[:guards_off]) do
+      {focus, reset} = bind(focus, {owner, opts[:subject]}, off)
+      focus = Focus.fade(focus)
+      walk_opts = [subject: opts[:subject], as_of: as_of]
+      unbounded = [unbounded: :bound in off]
 
+      with {:ok, focus} <- strip(store, owner, focus),
+           {:ok, found} <-
+             rank(store, owner, query, aspects, opts[:similarity], walk_opts, focus, off),
+           {:ok, affects} <- affects(store, owner, found.affects),
+           weights = Map.new(affects, fn {key, list} -> {key, max_weight(list)} end),
+           p = Store.persona(store, :recall_weight),
+           lift_focus = :persona_focus in off,
+           {:ok, defining} <- defining(store, owner, found.ranked, p, walk_opts),
+           {:ok, standing} <-
+             if(:contradiction in off,
+               do: {:ok, MapSet.new()},
+               else:
+                 standing(
+                   store,
+                   lifted(found.ranked, weights, defining, lift_focus),
+                   walk_opts
+                 )
+             ),
+           ranked =
+             found.ranked
+             |> Score.affect(weights, Store.affect(store, :recall_weight), standing)
+             |> Score.persona(defining, p, standing, focus: lift_focus)
+             |> Enum.take(k)
+             |> Enum.map(fn {key, _local, score, parts} -> {key, score, parts} end),
+           # The turn's cues come from the order with no affect and no DNA
+           # (§B.3, §C.4), and an affective memory is never one.
+           cue_keys = found.ranked |> Enum.take(k) |> Enum.map(&elem(&1, 0)),
+           {:ok, memories} <- load(store, Enum.map(ranked, &elem(&1, 0))),
+           {:ok, cued} <- load(store, cue_keys),
+           focus =
+             Focus.bring_in(
+               focus,
+               query_terms(store, query),
+               Enum.map(
+                 cued,
+                 &if(:affective in &1.aspects, do: :skip, else: {&1.key, &1.sources})
+               ),
+               unbounded
+             ),
+           due_opts = %{
+             events: events,
+             subject: opts[:subject],
+             as_of: as_of,
+             due_k: due_k,
+             all: all?,
+             off: off
+           },
+           {:ok, due} <- Due.due(store, owner, focus, due_opts) do
+        by_key =
+          Map.new(ranked, fn {key, score, parts} -> {Keys.local(owner, key), {score, parts}} end)
+
+        focus = Focus.surface(focus, Enum.map(due, & &1.memory.key), unbounded)
+
+        memories =
+          Enum.map(memories, fn m ->
+            %{m | affects: Map.get(affects, Keys.stored(owner, m.key), [])}
+          end)
+
+        {:ok,
+         %{
+           memories: memories,
+           scores: Enum.map(memories, &elem(by_key[&1.key], 0)),
+           parts: Enum.map(memories, &elem(by_key[&1.key], 1)),
+           scanned: found.scanned,
+           similarity: found.similarity,
+           due: due,
+           focus: focus,
+           focus_reset: reset
+         }}
+      end
+    end
+  end
+
+  # -- affects in recall (docs/spec.md §B.3) -------------------------------------
+
+  # A `{:memory, key}` cue that names an affective memory or a strand of the
+  # DNA matches nothing: it leaves the focus before anything is scored or
+  # evaluated against it.
+  defp strip(store, owner, %Focus{cues: cues} = focus) do
+    keys = for {{:memory, key}, _w} <- cues, do: Keys.stored(owner, key)
+
+    if keys == [] do
+      {:ok, focus}
+    else
+      query = """
+      given $k: string;
+      match $m isa memory, has memory_key == $k;
+        { $m has aspect "affective"; } or { $m has aspect "persona"; };
+      select $k;
+      """
+
+      with {:ok, rows} <- store |> DB.read(query, Enum.map(keys, &%{"k" => &1})) |> DB.rows() do
+        gone = MapSet.new(rows, &{:memory, Keys.local(owner, DB.value(&1, "k"))})
+        {:ok, %{focus | cues: Map.reject(cues, fn {cue, _w} -> MapSet.member?(gone, cue) end)}}
+      end
+    end
+  end
+
+  # The affective memories the walk met, split from the candidates: an
+  # affect a subject holds only for that subject's audience, one the owner
+  # holds as the walk's scope has it (§4.2). An affect weighs only while it
+  # is valid at the recall's time. A strand of the DNA is never a candidate
+  # (§C.2).
+  defp split(page, aspects, audience, at) do
+    named? = aspects != nil and :affective in aspects
+
+    candidates =
+      page
+      |> Enum.reject(&persona_doc?/1)
+      |> Enum.filter(&if(affective_doc?(&1), do: named? and shows_doc?(&1, audience), else: true))
+      |> filter_aspects(aspects)
+
+    entries =
+      for doc <- page, affective_doc?(doc), shows_doc?(doc, audience), valid_doc?(doc, at) do
+        %{
+          key: doc["memory_key"],
+          felt_by: Memory.felt_by(doc["felt_by"]),
+          basis: Memory.to_atom(doc["basis"]),
+          valence: doc["valence"],
+          arousal: doc["arousal"],
+          salience: doc["salience"]
+        }
+      end
+
+    {candidates, entries}
+  end
+
+  defp affective_doc?(doc), do: "affective" in field_list(doc, "aspect")
+  defp persona_doc?(doc), do: "persona" in field_list(doc, "aspect")
+
+  defp shows_doc?(doc, audience) do
+    case doc["felt_by"] do
+      "subject:" <> ref -> ref == audience
+      _ -> true
+    end
+  end
+
+  defp valid_doc?(doc, at) do
+    from = Memory.time(doc["valid_from"])
+    to = Memory.time(doc["valid_to"])
+
+    (from == nil or DateTime.compare(from, at) != :gt) and
+      (to == nil or DateTime.compare(to, at) == :gt)
+  end
+
+  # The affects shown, by the stored key of their object, each with its
+  # weight: `%{key:, felt_by:, basis:, valence:, arousal:, weight:}`.
+  defp affects(_store, _owner, []), do: {:ok, %{}}
+
+  defp affects(store, owner, entries) do
+    with {:ok, index} <- Reminisce.Affect.index(store, owner) do
+      {:ok,
+       entries
+       |> Enum.filter(&Map.has_key?(index, &1.key))
+       |> Enum.group_by(&index[&1.key].object, fn e ->
+         %{
+           key: Keys.local(owner, e.key),
+           felt_by: e.felt_by,
+           basis: e.basis,
+           valence: e.valence,
+           arousal: e.arousal,
+           weight:
+             Reminisce.Affect.weight(store, e.arousal, e.salience || 0.0, index[e.key].outside)
+         }
+       end)
+       |> Map.new(fn {object, list} -> {object, Enum.sort_by(list, & &1.key)} end)}
+    end
+  end
+
+  defp max_weight(list), do: list |> Enum.map(& &1.weight) |> Enum.max(fn -> 0 end)
+
+  # -- the DNA in recall (docs/spec.md §C.4) -------------------------------------
+
+  # The recall's self-defining memories, by stored key: its candidates that
+  # are grounds of a strand of the version current at its time that the
+  # audience may see. None is read when the lift is 0.
+  defp defining(_store, _owner, _ranked, 0, _walk_opts), do: {:ok, MapSet.new()}
+  defp defining(_store, _owner, [], _p, _walk_opts), do: {:ok, MapSet.new()}
+
+  defp defining(store, owner, ranked, _p, walk_opts) do
+    with {:ok, grounds} <- Reminisce.Persona.Read.grounds_shown(store, owner, walk_opts) do
+      {:ok,
+       for({key, _l, _s, _p} <- ranked, MapSet.member?(grounds, key), into: MapSet.new(), do: key)}
+    end
+  end
+
+  # The keys either multiplier would lift: the affect's, and the DNA's.
+  defp lifted(ranked, weights, defining, lift_focus) do
+    for {key, _l, score, parts} <- ranked,
+        score > 0,
+        Map.get(weights, key, 0) > 0 or
+          (MapSet.member?(defining, key) and (lift_focus or parts.terms > 0)),
+        do: key
+  end
+
+  # The memories a multiplier would lift that are claims of a contradiction
+  # standing in this recall: two or more of its claims are memories this
+  # recall may show, active (or, with `as_of`, believed then) and valid at its
+  # time. Only those memories' contradictions are read.
+  defp standing(store, lifted, walk_opts) do
+    if lifted == [] do
+      {:ok, MapSet.new()}
+    else
+      query = """
+      given $k: string;
+      match $m isa memory, has memory_key == $k; $c isa contradiction, links (claim: $m);
+        $c links (claim: $o); $o isa memory, has memory_key $ok;
+      select $k, $c, $ok;
+      """
+
+      with {:ok, rows} <- store |> DB.read(query, Enum.map(lifted, &%{"k" => &1})) |> DB.rows(),
+           claims = Enum.group_by(rows, &{DB.value(&1, "k"), &1["c"].iid}, &DB.value(&1, "ok")),
+           {:ok, memories} <- load(store, claims |> Map.values() |> List.flatten() |> Enum.uniq()) do
+        at = walk_opts[:as_of] || Store.now(store)
+
+        shown =
+          for m <- memories,
+              claim_shown?(m, walk_opts, at),
+              into: MapSet.new(),
+              do: Keys.stored(m.owner, m.key)
+
+        standing =
+          for {{key, _c}, claims} <- claims,
+              claims |> Enum.uniq() |> Enum.count(&MapSet.member?(shown, &1)) >= 2,
+              into: MapSet.new(),
+              do: key
+
+        {:ok, standing}
+      end
+    end
+  end
+
+  defp claim_shown?(%Memory{} = m, walk_opts, at) do
+    audience = walk_opts[:subject]
+
+    visible = m.subjects == [] or Enum.any?(m.subjects, &(&1.subject == audience))
+    valid = before?(m.valid_from, at) and (m.valid_to == nil or not before?(m.valid_to, at))
+
+    believed =
+      if walk_opts[:as_of] do
+        m.status != :withdrawn and before?(m.recorded_at, at) and
+          (m.status == :active or not before?(m.status_changed_at, at))
+      else
+        m.status == :active
+      end
+
+    visible and valid and believed
+  end
+
+  # `a` at or before `b`.
+  defp before?(nil, _b), do: true
+  defp before?(a, b), do: DateTime.compare(a, b) != :gt
+
+  defp bind(focus, binding, off) do
+    if :focus_reset in off,
+      do: {%{focus | bound: binding}, false},
+      else: Focus.bind(focus, binding)
+  end
+
+  defp query_terms(_store, nil), do: []
+
+  defp query_terms(%Store{analyser: analyser}, query),
+    do: query |> analyser.terms() |> Enum.uniq()
+
+  # Without a query: every candidate in the order of the caller's keys,
+  # every score 0. The walk runs in stored-key order, which is not that one.
+  defp rank(store, owner, nil, aspects, _port, walk_opts, _focus, _off) do
+    {audience, at} = {walk_opts[:subject], walk_opts[:as_of] || Store.now(store)}
+
+    fun = fn page, {found, affects, scanned} ->
+      {page, entries} = split(page, aspects, audience, at)
+      keys = Enum.map(page, &{Keys.local(owner, &1["memory_key"]), &1["memory_key"]})
+
+      {:cont,
+       {Enum.take(Enum.sort(found ++ keys), @max_k), entries ++ affects, scanned + length(page)}}
+    end
+
+    with {:ok, {found, affects, scanned}} <- walk(store, owner, walk_opts, {[], [], 0}, fun) do
       {:ok,
        %{
-         memories: memories,
-         scores: Enum.map(memories, &scores[&1.key]),
+         ranked: Enum.map(found, fn {local, key} -> {key, local, 0, %{terms: 0, focus: 0}} end),
+         affects: affects,
          scanned: scanned,
-         similarity: similarity
+         similarity: :not_asked
        }}
     end
   end
 
-  # Without a query: the first k memories in the order of the caller's keys,
-  # every score 0. The walk runs in stored-key order, which is not that one.
-  defp rank(store, owner, nil, k, aspects, _port, walk_opts) do
-    fun = fn page, {found, scanned} ->
-      page = filter_aspects(page, aspects)
-      keys = Enum.map(page, &{Reminisce.Keys.local(owner, &1["memory_key"]), &1["memory_key"]})
-      {:cont, {Enum.take(Enum.sort(found ++ keys), k), scanned + length(page)}}
-    end
-
-    with {:ok, {found, scanned}} <- walk(store, owner, walk_opts, {[], 0}, fun) do
-      {:ok, Enum.map(found, fn {_local, key} -> {key, 0} end), scanned, :not_asked}
-    end
-  end
-
   # With a query: one pass over every candidate. Each page keeps only the
-  # memories that share a query term (or that the similarity port scored), and
-  # counts how many candidates hold each query term; the integer weights come
-  # from those counts once the walk is done.
-  defp rank(%Store{analyser: analyser} = store, owner, query, k, aspects, port, walk_opts) do
+  # memories that share a term with the query or the focus (or that the
+  # similarity port scored), and counts how many candidates hold each such
+  # term; the integer weights come from those counts once the walk is done
+  # (Reminisce.Score).
+  defp rank(
+         %Store{analyser: analyser} = store,
+         owner,
+         query,
+         aspects,
+         port,
+         walk_opts,
+         focus,
+         off
+       ) do
     query_terms = query |> analyser.terms() |> Enum.uniq() |> MapSet.new()
-    init = %{matched: [], df: %{}, n: 0, similarity: if(port, do: :used, else: :not_asked)}
+
+    focus_terms =
+      for {{:term, t}, w} <- focus.cues, not MapSet.member?(query_terms, t), into: %{}, do: {t, w}
+
+    focus_memories = for {{:memory, key}, w} <- focus.cues, into: %{}, do: {key, w}
+    wanted = MapSet.union(query_terms, MapSet.new(Map.keys(focus_terms)))
+
+    init = %{
+      matched: [],
+      df: %{},
+      n: 0,
+      affects: [],
+      similarity: if(port, do: :used, else: :not_asked)
+    }
+
+    {audience, at} = {walk_opts[:subject], walk_opts[:as_of] || Store.now(store)}
 
     fun = fn page, acc ->
-      page = filter_aspects(page, aspects)
+      {page, entries} = split(page, aspects, audience, at)
       {status, extra} = similarity(port, acc.similarity, owner, query, page)
 
       matched =
         for doc <- page,
-            terms = MapSet.intersection(query_terms, doc_terms(analyser, doc)),
+            terms = MapSet.intersection(wanted, doc_terms(analyser, doc)),
             extra_score = Map.get(extra, doc["memory_key"], 0),
-            MapSet.size(terms) > 0 or extra_score > 0,
-            do: {doc["memory_key"], terms, extra_score}
+            MapSet.size(terms) > 0 or extra_score > 0 do
+          key = doc["memory_key"]
+          %{key: key, local: Keys.local(owner, key), terms: terms, extra: extra_score}
+        end
 
       df =
-        Enum.reduce(matched, acc.df, fn {_k, terms, _e}, df ->
+        Enum.reduce(matched, acc.df, fn %{terms: terms}, df ->
           Enum.reduce(terms, df, &Map.update(&2, &1, 1, fn n -> n + 1 end))
         end)
 
@@ -317,25 +636,58 @@ defmodule Reminisce.Read do
          | matched: matched ++ acc.matched,
            df: df,
            n: acc.n + length(page),
+           affects: entries ++ acc.affects,
            similarity: status
        }}
     end
 
     with {:ok, acc} <- walk(store, owner, walk_opts, init, fun) do
-      weights = Map.new(acc.df, fn {t, df} -> {t, round(1000 * :math.log((acc.n + 1) / df))} end)
-
       ranked =
-        acc.matched
-        |> Enum.map(fn {key, terms, extra} ->
-          {key, Enum.reduce(terms, extra, &(&2 + weights[&1]))}
-        end)
-        |> Enum.filter(fn {_key, score} -> score > 0 end)
-        |> Enum.sort_by(fn {key, score} -> {-score, Reminisce.Keys.local(owner, key)} end)
-        |> Enum.take(k)
+        Score.rank(acc.matched, acc.df, acc.n, query_terms, focus_terms, focus_memories,
+          no_cap: :focus_cap in off
+        )
 
-      {:ok, ranked, acc.n, acc.similarity}
+      {:ok, %{ranked: ranked, affects: acc.affects, scanned: acc.n, similarity: acc.similarity}}
     end
   end
+
+  # An event kind is a host's name, as in an `event:` cue.
+  @max_events 64
+
+  defp events(nil), do: {:ok, []}
+
+  defp events(list) when is_list(list) and length(list) <= @max_events do
+    if Enum.all?(list, &(is_binary(&1) and Regex.match?(~r/\A[a-z0-9_.-]{1,64}\z/, &1))),
+      do: {:ok, Enum.uniq(list)},
+      else: {:error, {:invalid, :events}}
+  end
+
+  defp events(_), do: {:error, {:invalid, :events}}
+
+  defp due_k(nil), do: {:ok, 3}
+  defp due_k(k) when is_integer(k) and k >= 0 and k <= 10, do: {:ok, k}
+  defp due_k(_), do: {:error, {:invalid, :due_k}}
+
+  defp due_mode(nil), do: {:ok, false}
+  defp due_mode(:all), do: {:ok, true}
+  defp due_mode(_), do: {:error, {:invalid, :due}}
+
+  defp focus(nil), do: {:ok, Focus.new()}
+
+  defp focus(%Focus{} = f),
+    do: if(Focus.valid?(f), do: {:ok, f}, else: {:error, {:invalid, :focus}})
+
+  defp focus(_), do: {:error, {:invalid, :focus}}
+
+  defp seams(nil), do: {:ok, MapSet.new()}
+
+  defp seams(list) when is_list(list) do
+    if Enum.all?(list, &(&1 in @seams)),
+      do: {:ok, MapSet.new(list)},
+      else: {:error, {:invalid, :guards_off}}
+  end
+
+  defp seams(_), do: {:error, {:invalid, :guards_off}}
 
   defp k(nil), do: {:ok, 8}
   defp k(k) when is_integer(k) and k > 0 and k <= @max_k, do: {:ok, k}
@@ -348,6 +700,7 @@ defmodule Reminisce.Read do
   defp aspects(_store, nil), do: {:ok, nil}
 
   defp aspects(%Store{aspects: allowed}, list) when is_list(list) do
+    allowed = allowed ++ [:affective]
     found = Enum.map(list, fn a -> Enum.find(allowed, &(&1 == a or Atom.to_string(&1) == a)) end)
     if Enum.any?(found, &is_nil/1), do: {:error, {:invalid, :aspects}}, else: {:ok, found}
   end
@@ -436,6 +789,17 @@ defmodule Reminisce.Read do
          {:ok, %DateTime{} = at} <- Reminisce.Attrs.time(:at, at),
          {:ok, keys} <- walk(store, owner, Keyword.put(walk_opts, :as_of, at), [], fun),
          {:ok, memories} <- load(store, Enum.sort_by(keys, &Reminisce.Keys.local(owner, &1))) do
+      # Under a scope of its own, an affect a subject holds is that subject's
+      # alone (docs/spec.md §B.3); `:all` is the host's full read.
+      memories =
+        if walk_opts[:scope] == :all,
+          do: memories,
+          else:
+            Enum.filter(
+              memories,
+              &(:affective not in &1.aspects or Reminisce.Affect.shows?(&1, opts[:subject]))
+            )
+
       {:ok, %{memories: memories}}
     else
       {:ok, nil} -> {:error, {:invalid, :at}}
