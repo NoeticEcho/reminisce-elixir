@@ -103,7 +103,7 @@ defmodule Reminisce.Plugin.PluginTest do
     assert text =~ ~r/TypeDB (server )?each/i
   end
 
-  test "server.sha256 holds only this version's tarballs, in sha256sum's format" do
+  test "server.sha256 pins this version's four tarballs or none, in sha256sum's format" do
     version = manifest()["version"]
 
     lines =
@@ -116,6 +116,13 @@ defmodule Reminisce.Plugin.PluginTest do
       assert line =~
                ~r/\A[0-9a-f]{64}  reminisce-mcp-#{Regex.escape(version)}-(linux|macos)-(x86_64|arm64)\.tar\.gz\z/
     end
+
+    # The release commit pins none; the commit that pins it once the release
+    # is published pins all four.
+    platforms = lines |> Enum.map(&(&1 |> String.split("-") |> Enum.take(-2))) |> Enum.sort()
+
+    assert length(lines) in [0, 4] and length(Enum.uniq(platforms)) == length(lines),
+           inspect(lines)
   end
 
   test "the setup skill is the user's to run, and names only the plugin's own scripts" do
@@ -280,6 +287,29 @@ defmodule Reminisce.Plugin.PluginTest do
       assert status == 1
       assert err =~ "it is not the release's file. Nothing was installed."
       assert clean?(root)
+    end
+  end
+
+  describe "scripts/install-server, when curl has no CA certificates" do
+    setup :copy
+
+    test "says to install ca-certificates", %{root: root} do
+      bin = Path.join(Path.dirname(root), "nocerts_" <> hex(4))
+      File.mkdir_p!(bin)
+      File.write!(Path.join(bin, "curl"), "#!/bin/sh\nexit 77\n")
+      File.chmod!(Path.join(bin, "curl"), 0o755)
+
+      for pinned? <- [false, true] do
+        if pinned?, do: pin(root, String.duplicate("a", 64))
+        {_, status, err} = sh(Path.join(root, "scripts/install-server"), [], path: bin)
+
+        assert status == 1
+        assert err =~ "curl found no CA certificates"
+        assert err =~ "install ca-certificates"
+        assert err =~ "Nothing was installed."
+        refute err =~ "its reason is above"
+        assert clean?(root)
+      end
     end
   end
 

@@ -34,7 +34,9 @@ Every memory needs:
   are `episodic` (something that happened), `semantic` (a fact), `procedural`
   (how to do something), `autobiographical` (about the owner) and
   `prospective` (something to do). A host can configure others; the server
-  takes the ones its store has and refuses any other with `invalid`.
+  takes the ones its store has, lists them in the tool's schema,
+  and refuses any other with `invalid`, naming the ones it takes in
+  `allowed`.
 - `basis`: how you know it. `told` when the user said it, `observed` when you
   saw it in a file or a tool's output, `inferred` when you concluded it, and
   `generated` for model output: a summary, your own suggestion. Never give

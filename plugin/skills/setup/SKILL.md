@@ -54,8 +54,20 @@ password the user gives the plugin's settings as the TypeDB password. If
 the plugin's database setting is not `reminisce`, the line that starts `sh` needs
 `REMINISCE_DATABASE=` with that name in front of it.
 
+The TypeDB listens on port 8000. If that port is taken (the script then says
+that docker compose could not start TypeDB), by a TypeDB the user already
+runs for instance, the line that starts `sh` needs `REMINISCE_TYPEDB_PORT=`
+with a free port in front of it, such as `REMINISCE_TYPEDB_PORT=8001`, and
+the plugin's `typedb_url` setting must then be `http://127.0.0.1:` with that
+port. Tell the user to change the setting; a TypeDB they already run can
+also be the plugin's, with its own URL and password.
+
+If the install script says that curl found no CA certificates, the machine
+lacks the `ca-certificates` package: the user installs it, then runs this
+step again.
+
 ## 3. Connect
 
 Ask the user to reconnect the server with `/mcp`, or to restart the
-client. The server then starts with the plugin's settings, and its six
+client. The server then starts with the plugin's settings, and its eight
 tools are there.

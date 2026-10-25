@@ -1,0 +1,12 @@
+/* Box model, first and once. Padding and borders are part of a box's declared size, not added
+   to it. Without this every component must remember boxSizing on every padded element — a rule
+   nobody keeps: a sweep fixed ten components, and FileUploader's drop zone still grew 49px past
+   its own grid track and sat on top of the calendar beside it. One reset closes the class. */
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body { margin: 0; background: var(--surface-canvas); color: var(--text-primary); }
+body { font-family: var(--font-sans); font-size: var(--text-body-sm); line-height: var(--lh-body-sm); -webkit-font-smoothing: antialiased; }
+a { color: var(--text-link); text-decoration: none; border-bottom: 1px solid var(--border-brass); }
+a:hover { color: var(--text-link-hover); border-bottom-color: var(--paper-050); }
+::selection { background: var(--brass-700); color: var(--paper-050); }
+:focus-visible { outline: 1px solid var(--border-focus); outline-offset: 2px; }

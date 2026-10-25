@@ -50,6 +50,46 @@ defmodule Reminisce.Plugin.FirstRunTest do
 
       assert inspect =~ "127.0.0.1"
       for text <- [config, inspect, logs], do: assert(secret_free?(text, password))
+
+      # A run with the wrong password fails, and leaves the TypeDB it found
+      # running and secured as it was.
+      wrong = "fr-" <> hex(12)
+      {out, status, err} = first_run(project, port, wrong, database)
+      assert status == 1
+      assert out == ""
+      assert err =~ "the database was not set up"
+      assert err =~ "is left running"
+      refute err =~ "stopping TypeDB again"
+      assert secret_free?(err, wrong) and secret_free?(err, password)
+      assert running?(project)
+      assert {:ok, _} = with_typedb(url, password, &TypeDB.Database.list/1)
+    end
+  end
+
+  describe "a TypeDB that was running on its default password" do
+    @describetag :docker
+    @describetag timeout: 600_000
+
+    test "is stopped when the set-up fails, though this run did not start it" do
+      project = "reminisce-t-" <> hex(4)
+      port = free_port()
+      on_exit(fn -> docker(["compose", "-p", project, "-f", @compose, "down", "--volumes"]) end)
+
+      {_, 0} =
+        System.cmd(
+          "docker",
+          ["compose", "-p", project, "-f", @compose, "up", "-d", "--quiet-pull"],
+          env: [{"REMINISCE_TYPEDB_PORT", to_string(port)}],
+          stderr_to_stdout: true
+        )
+
+      assert running?(project)
+      await_health("http://127.0.0.1:#{port}")
+
+      {_out, status, err} = first_run(project, port, "fr-" <> hex(12), "t_fail", "/bin/false")
+      assert status == 1
+      assert err =~ "stopping TypeDB again"
+      refute running?(project)
     end
   end
 
@@ -144,6 +184,24 @@ defmodule Reminisce.Plugin.FirstRunTest do
   end
 
   defp docker(args), do: System.cmd("docker", args, stderr_to_stdout: true)
+
+  defp running?(project) do
+    {running, 0} =
+      docker(["compose", "-p", project, "-f", @compose, "ps", "-q", "--status", "running"])
+
+    String.trim(running) != ""
+  end
+
+  defp await_health(url, tries \\ 120) do
+    case System.cmd("curl", ["-fsS", "--max-time", "5", url <> "/health"], stderr_to_stdout: true) do
+      {_, 0} ->
+        :ok
+
+      _ when tries > 0 ->
+        Process.sleep(1_000)
+        await_health(url, tries - 1)
+    end
+  end
 
   defp free_port do
     {:ok, listen} = :gen_tcp.listen(0, ip: {127, 0, 0, 1})

@@ -100,7 +100,15 @@ if [ -n "$file" ]; then
 else
   command -v curl >/dev/null 2>&1 || fail "curl is not installed; it is needed to download the server"
   url=$release/v$version/$tarball
-  get() { curl -fsSL --proto '=https' --tlsv1.2 -o "$1" "$2"; }
+  # curl's exit 77 is a CA certificate store it cannot read: a system
+  # without the ca-certificates package, such as a bare container image.
+  get() {
+    got=0
+    curl -fsSL --proto '=https' --tlsv1.2 -o "$1" "$2" || got=$?
+    [ "$got" != 77 ] ||
+      fail "curl found no CA certificates to check $2 with (its exit 77): install ca-certificates (apt-get install ca-certificates, or your system's package of that name) and run this again. Nothing was installed."
+    return "$got"
+  }
 
   if [ -z "$sha" ]; then
     # A version's plugin is published before its release's tarballs exist,

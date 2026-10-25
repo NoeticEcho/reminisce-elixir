@@ -11,6 +11,9 @@
 # when anything fails after TypeDB was started, the script stops it (`docker
 # compose stop`: its data volume is kept) and says so; it is never left
 # running on the default password. Run it again once the cause is fixed.
+# A TypeDB that was already running before this run, and that no longer
+# takes the default password, is left running: a run with the wrong
+# password then fails without stopping a TypeDB that was secured already.
 #
 #   TYPEDB_PASSWORD=... plugin/typedb/first-run
 #
@@ -77,11 +80,29 @@ else
   esac
 fi
 
+# Whether this project's TypeDB was running before this run started it.
+running_before=0
+if [ -n "$(docker compose -p "$project" -f "$here/compose.yaml" ps -q --status running typedb 2>/dev/null)" ]; then
+  running_before=1
+fi
+
+# What TypeDB answers a sign-in with its default password: 401 once that
+# password is replaced. The password is TypeDB's public default, not a secret.
+default_signin() {
+  curl -sS -o /dev/null -w '%{http_code}' --max-time 5 -X POST "$url/v1/signin" \
+    -H 'Content-Type: application/json' -d '{"username":"admin","password":"password"}' 2>/dev/null || true
+}
+
 # From here TypeDB may be running on its default password: any way out of the
-# script but success stops it (the volume stays).
+# script but success stops it (the volume stays), unless it was running before
+# this run and refuses the default password.
 finished=0
 stop_typedb() {
   [ "$finished" = 1 ] && return 0
+  if [ "$running_before" = 1 ] && [ "$(default_signin)" = 401 ]; then
+    say "TypeDB was running before this run and does not take the default password, so it is left running. If the password was wrong, run this again with the one the TypeDB admin user has."
+    return 0
+  fi
   say "stopping TypeDB again so that it is not left on its default password (its data is kept); run this again once the cause is fixed. To stop it by hand: docker compose -p $project stop"
   docker compose -p "$project" -f "$here/compose.yaml" stop >&2 ||
     say "could not stop it: run 'docker compose -p $project stop' yourself."

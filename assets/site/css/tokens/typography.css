@@ -1,0 +1,40 @@
+/* GENERATED from tokens/tokens.dtcg.json by tokens/build.js — do not edit by hand. */
+:root {
+  --font-serif: "Literata", "Noto Serif", "PT Serif", "Georgia", serif;                                                      /* titles, quotes, Observer voice */
+  --font-sans: "IBM Plex Sans", "Noto Sans", "Noto Sans SC", "Noto Sans JP", "Noto Sans KR", system-ui, sans-serif;  /* UI, body */
+  --font-mono: "JetBrains Mono", "Noto Sans Mono", ui-monospace, monospace;                                                  /* ids, states, data, commands */
+
+  --weight-light: 300;
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+
+  --text-caption: 12px;                                                                                                      /* 11px only for engraved mono ids */
+  --lh-caption: 1.3;
+  --text-label: 12px;
+  --lh-label: 1.35;
+  --text-body-sm: 14px;
+  --lh-body-sm: 1.5;
+  --text-body-size: 16px;   /* renamed: --text-body is the colour in colors.css, imported earlier */
+  --lh-body: 1.55;
+  --text-body-lg: 20px;
+  --lh-body-lg: 1.45;
+  --text-display-sm: 32px;
+  --lh-display-sm: 1.05;
+  --text-display: 56px;
+  --lh-display: 0.96;
+  --text-display-xl: clamp(72px, 11vw, 180px);                                                                               /* the poster register */
+  --lh-display-xl: 0.84;
+  --text-quote-min: 16px;                                                                                                    /* serif below 16px loses its hairlines on ink; mobile quotes are 16px / weight 500 minimum */
+
+  --tracking-label: 0.14em;                                                                                                  /* engraved uppercase labels */
+  --tracking-plate: 0.22em;                                                                                                  /* engraved caps on plates: WORLD STATE, TRANSITION */
+  --tracking-mark: 0.3em;                                                                                                    /* the widest register: world names, thresholds */
+  --tracking-wide: 0.28em;                                                                                                   /* tagline caps */
+  --tracking-mono: 0.04em;
+  --tracking-serif: 0.02em;
+
+  --stretch-plate: 100%;
+  --stretch-mark: 100%;
+  --stretch-body: 100%;
+}

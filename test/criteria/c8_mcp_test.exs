@@ -466,8 +466,12 @@ defmodule Reminisce.Criteria.MCPTest do
       [reply] = script(a, [call(1, "memory_remember", args)])
       assert reply["result"]["isError"]
 
+      # The refusal names the aspects the tool takes, which persona is not.
+      allowed = Enum.map(a.aspects, &Atom.to_string/1)
+      refute "persona" in allowed
+
       assert reply["result"]["structuredContent"] ==
-               json(Output.error({:invalid, :aspects})),
+               Map.put(json(Output.error({:invalid, :aspects})), "allowed", allowed),
              inspect(aspects)
 
       assert {:error, {:invalid, :aspects}} = Reminisce.remember(b, @owner, args)

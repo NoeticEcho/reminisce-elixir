@@ -1,0 +1,42 @@
+/* GENERATED from tokens/tokens.dtcg.json by tokens/build.js — do not edit by hand. */
+:root {
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --space-8: 64px;
+  --space-9: 96px;
+  --space-10: 128px;
+  --line: 1px;
+  --radius-none: 0px;
+  --radius-clip: 6px;                                             /* mobile plates only, where a plate meets the screen edge. There is no pill and no control radius — controls are square everywhere. */
+
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-bottom-min: max(env(safe-area-inset-bottom, 0px), 8px);  /* the home indicator needs clearance even where the inset reports 0 */
+
+  --bp-hand: 600px;                                               /* below: one column, bottom-anchored controls */
+  --bp-lap: 1024px;                                               /* below: two columns, margins collapse to one side */
+  --bp-desk: 1440px;                                              /* at and above: the full margin composition */
+
+  --measure: 68ch;                                                /* long-form line length — the serif at 18px */
+  --measure-narrow: 46ch;                                         /* asides, captions, pull quotes */
+  --gutter: 24px;
+  --gutter-desk: 40px;
+  --section-y: 96px;                                              /* vertical rhythm between page sections */
+  --section-y-hand: 56px;
+  --content-max: 1680px;
+  --margin-desktop: 48px;
+  --gutter-desktop: 20px;
+  --margin-mobile: 16px;
+  --gutter-mobile: 12px;
+
+  --hit-min: 44px;                                                /* touch and pointer floor, no exceptions */
+
+  --panel-pad: 14px 16px;
+}

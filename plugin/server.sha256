@@ -4,9 +4,11 @@
 #   SHA256  reminisce-mcp-VERSION-OS-ARCH.tar.gz
 #
 # scripts/install-server checks the tarball it downloads against the line
-# here for it. A version's plugin is published before its release's tarballs
-# are built, so a new version has none: install-server then checks against
+# here for it. A release's tarballs are built after the release is tagged,
+# so the release's own commit pins none: install-server then checks against
 # the release's own .sha256 file, and says that this finds a damaged
-# download, not a release whose files were replaced. Lines added here, from
-# a published release's .sha256 files, make the check independent of the
-# release.
+# download, not a release whose files were replaced. Once the release is
+# published, a second commit of the same version writes its four lines here
+# (the pin commit), and a plugin installed from that commit checks against
+# them, independently of the release. The next release is not cut until it
+# has been made.

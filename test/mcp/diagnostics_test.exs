@@ -25,6 +25,9 @@ defmodule Reminisce.MCP.DiagnosticsTest do
     assert err =~ "cannot reach TypeDB at #{local(port)}"
     assert err =~ "connection refused"
     assert err =~ "first-run"
+    refute err =~ "[debug]", "the driver's retries are not logged while the server starts"
+    refute err =~ "[warning]", "nor its giving up: the error says it"
+    assert err |> String.split("\n", trim: true) |> length() == 1, err
   end
 
   test "a server that is not TypeDB 3's HTTP API" do
@@ -89,6 +92,28 @@ defmodule Reminisce.MCP.DiagnosticsTest do
 
     assert [%{"id" => 1, "result" => %{"serverInfo" => %{"name" => "reminisce"}}}] =
              json_rpc!(out)
+  end
+
+  test "a database the server creates is named on stderr, once" do
+    db = db()
+    on_exit(fn -> TypeDB.Database.delete(TypeDB, db) end)
+    input = ~s({"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}\n)
+
+    {out, status, err} = run(["--owner", "agent:d", "--database", db], input: input)
+    assert status == 0, err
+    assert [%{"id" => 1}] = json_rpc!(out)
+    assert err =~ "reminisce: created database #{db} on TypeDB at"
+    assert err =~ "check the database setting"
+
+    {_out, status, err} = run(["--owner", "agent:d", "--database", db], input: input)
+    assert status == 0, err
+    refute err =~ "created database"
+
+    db = db()
+    on_exit(fn -> TypeDB.Database.delete(TypeDB, db) end)
+    {_out, status, err} = run(["--init", "--database", db])
+    assert status == 0, err
+    assert err =~ "reminisce: created database #{db} on TypeDB at"
   end
 
   test "a URL with credentials in it is refused, and not repeated" do

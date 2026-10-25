@@ -9,6 +9,13 @@
 # installed: Debian slim, and AlmaLinux 8 minimal for the oldest glibc
 # claimed (2.28).
 #
+# On a tag, and when run by hand (workflow_dispatch), the plugin is then
+# installed as a user installs it, on macOS arm64 and x86_64 and on Linux:
+# scripts/plugin-install-test installs the just-built tarball with the
+# plugin's install-server, sets a TypeDB up (TypeDB's own macOS archive,
+# pinned by checksum; the plugin's first-run with Docker on Linux) and drives
+# the plugin's MCP server through remember, recall, why and forget.
+#
 # On a tag vX.Y.Z the tarballs and their checksums are attached to that tag's
 # GitHub release, created here as a draft if there is none: the one release
 # of the version, which its owner edits and publishes. Attaching refuses a release that is published or that
@@ -21,6 +28,7 @@ name: release
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
   pull_request:
     paths:
       - .github/workflows/release.yml
@@ -243,10 +251,52 @@ jobs:
           echo "$server in ${{ matrix.name }}: answered three requests and exited in $(( (end - start) / 1000000 )) ms" |
             tee -a "$GITHUB_STEP_SUMMARY"
 
+  install:
+    # The plugin as a user installs it, from the tarball just built: on a tag
+    # and by hand, not on a pull request.
+    name: install-${{ matrix.platform }}
+    if: github.event_name != 'pull_request'
+    needs: [linux, macos]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: macos-14, platform: macos-arm64, typedb: mac-arm64, typedb_sha256: 0e146d069473223d5d2523cdf0e889738f73cd2ae8d532bdf611d2f200ae6c9f }
+          - { os: macos-15-intel, platform: macos-x86_64, typedb: mac-x86_64, typedb_sha256: ed0e49f69386514e0b5647c7292a6734cacef211b6c671c38842ff2a2fb16777 }
+          - { os: ubuntu-24.04, platform: linux-x86_64 }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: server-${{ matrix.platform }}
+          path: ${{ runner.temp }}/dist
+      - name: Start TypeDB from its macOS archive
+        if: matrix.typedb
+        run: |
+          name=typedb-all-${{ matrix.typedb }}-$TYPEDB_VERSION
+          curl -fsSL -o "$RUNNER_TEMP/typedb.zip" \
+            "https://repo.typedb.com/public/public-release/raw/names/typedb-all-${{ matrix.typedb }}/versions/$TYPEDB_VERSION/$name.zip"
+          echo "${{ matrix.typedb_sha256 }}  $RUNNER_TEMP/typedb.zip" | shasum -a 256 --check
+          unzip -q "$RUNNER_TEMP/typedb.zip" -d "$RUNNER_TEMP"
+          nohup "$RUNNER_TEMP/$name/typedb" server >"$RUNNER_TEMP/typedb.log" 2>&1 &
+          for i in $(seq 1 60); do
+            curl --fail --silent http://127.0.0.1:8000/health && exit 0
+            sleep 2
+          done
+          tail -20 "$RUNNER_TEMP/typedb.log" >&2
+          exit 1
+      - name: Install the plugin's server and drive it
+        env:
+          TYPEDB: ${{ matrix.typedb && 'http://127.0.0.1:8000' || 'docker' }}
+        run: scripts/plugin-install-test --tarball "$(ls "$RUNNER_TEMP"/dist/*.tar.gz)" --typedb "$TYPEDB"
+
   attach:
     # Only on a tag, and only once every platform has passed.
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [linux, macos, bare]
+    needs: [linux, macos, bare, install]
     runs-on: ubuntu-24.04
     permissions:
       contents: write

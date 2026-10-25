@@ -1,0 +1,12 @@
+{%- for group in site.data.nav %}
+<p class="label">{{ group.group }}</p>
+<ul>
+  {%- for item in group.items %}
+  {%- if item.url contains "://" %}
+  <li><a href="{{ item.url }}">{{ item.title }}</a></li>
+  {%- else %}
+  <li><a href="{{ item.url | relative_url }}"{% if page.url == item.url %} aria-current="page"{% endif %}>{{ item.title }}</a></li>
+  {%- endif %}
+  {%- endfor %}
+</ul>
+{%- endfor %}

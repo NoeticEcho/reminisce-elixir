@@ -34,8 +34,32 @@ And four skills:
 | `owner-and-scope` | You ask whose memory this is, or want separate memories for people, projects or agents. |
 | `setup` | You type `/noetic-reminisce:setup`, once, to install the server and start a TypeDB. Claude never starts it on its own. |
 
+## What you need
+
+- macOS 13 or newer (Apple silicon or Intel), or Linux with glibc 2.28 or
+  newer (x86_64 or arm64). Windows is not supported.
+- `curl`, with the `ca-certificates` package (without it curl cannot check
+  github.com's certificate), `tar`, and `sha256sum` or `shasum`. macOS has
+  them all; a minimal Linux image may lack `curl` and `ca-certificates`.
+- A TypeDB 3.12 or later. If you have none, the setup step starts one with
+  Docker, which then needs to be installed and running, with its compose
+  plugin (`docker compose version` answers).
+
 ## Setting it up
 
+0. **The plugin.** In Claude Code, from a clone of
+   [the repository](https://github.com/NoeticEcho/reminisce-elixir), for a
+   session:
+
+   ```sh
+   git clone https://github.com/NoeticEcho/reminisce-elixir.git
+   cd reminisce-elixir
+   claude --plugin-dir ./plugin
+   ```
+
+   Once it is listed in Anthropic's plugin directory, add it from
+   **Customize > Plugins** on claude.ai, or in Claude Code with `/plugin`.
+   It is not listed yet: until it is, the clone is the way.
 1. **The settings.** Installing the plugin asks for four:
    - `owner`: whose memory this is, written `kind:key`, such as `user:alice`;
    - `database`: the TypeDB database, `reminisce` unless you change it;
@@ -60,7 +84,16 @@ And four skills:
    password with yours, and create the database. Claude never sees the
    password. If any step fails, the script stops TypeDB again, so it is not
    left running on its default password; there is a short window, while it
-   runs, when it is.
+   runs, when it is. A TypeDB that was already running and no longer takes
+   the default password is left running: a run with the wrong password
+   does not stop it.
+
+   If port 8000 is taken, by a TypeDB you already run for instance, put
+   `REMINISCE_TYPEDB_PORT=` with a free port in front of the line that
+   starts `sh`, such as `REMINISCE_TYPEDB_PORT=8001 sh ...`, and set
+   `typedb_url` to match: `http://127.0.0.1:8001`. (A TypeDB 3.12 or later
+   that you already run can also be the plugin's: skip this step and give
+   its address and admin password.)
 
    To stop TypeDB later without deleting your memories, run
    `docker compose -p reminisce-typedb -f typedb/compose.yaml stop` from the
@@ -73,9 +106,6 @@ After the plugin updates, run `/noetic-reminisce:setup` again: the server it
 installed belongs to the old version. Server downloads exist only for
 releases from 0.5.2 on; an earlier plugin version finds none.
 
-The server runs on macOS 13 or newer (Apple silicon and Intel) and on Linux
-with glibc 2.28 or newer (x86_64 and arm64). Windows is not supported.
-
 ## What it runs, and where data goes
 
 | What | When | Where it sends data |
@@ -86,6 +116,23 @@ with glibc 2.28 or newer (x86_64 and arm64). Windows is not supported.
 
 The plugin has no hooks and no background processes, and it sends no
 telemetry. NoeticEcho runs no service for it and receives nothing from it.
+
+## Credentials
+
+The plugin uses one credential: the password of your TypeDB's `admin` user.
+It reads no other: no token, no file in your home directory, no other tool's
+configuration or sign-in. The downloads from GitHub and Docker Hub are
+anonymous.
+
+| Who has the password | How it gets it | What it does with it |
+|---|---|---|
+| Claude Code | You type it into the `typedb_password` setting, which is marked sensitive | Keeps it in your system's secure storage, and passes it to the plugin's MCP server only, as `TYPEDB_PASSWORD` in its environment |
+| `bin/reminisce-mcp`, the MCP server | `TYPEDB_PASSWORD`, from Claude Code | Signs in to the TypeDB at `typedb_url` with it, and sends it nowhere else. It never writes it to its output or its logs |
+| `typedb/first-run` | `TYPEDB_PASSWORD`, set by the lines you run in your own terminal, which read it without showing it | Gives it to the TypeDB it starts, in place of TypeDB's default password. Claude does not see it |
+
+Use a password of its own for this TypeDB, not one you use anywhere else.
+At `http://127.0.0.1:8000`, the setup step's address, it does not leave your
+machine; to a TypeDB on another machine, use an `https://` address.
 
 ## Privacy, in short
 

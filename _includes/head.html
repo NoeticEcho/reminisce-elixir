@@ -1,0 +1,46 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+{% seo %}
+{%- if page.sitemap == false %}
+<meta name="robots" content="noindex">
+{%- endif %}
+<meta name="color-scheme" content="dark light">
+<meta name="theme-color" content="#0A0B09" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#E9E3D2" media="(prefers-color-scheme: light)">
+<script>
+/* Ink or Paper: the reader's last choice, else the system's preference. Runs before the first
+   paint so the page never flashes the wrong theme. The key is shared with open.noeticecho.space. */
+(function () {
+  var t = null;
+  try { t = localStorage.getItem("noeticecho.theme"); } catch (e) {}
+  if (t !== "ink" && t !== "paper") t = window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches ? "paper" : "ink";
+  document.documentElement.setAttribute("data-theme", t);
+})();
+</script>
+<link rel="preload" href="{{ '/assets/site/fonts/ibm-plex-sans-400-latin.woff2' | relative_url }}" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="{{ '/assets/site/fonts/literata-400-latin.woff2' | relative_url }}" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="{{ '/assets/site/fonts/jetbrains-mono-400-latin.woff2' | relative_url }}" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="{{ '/assets/site/css/fonts.css' | relative_url }}">
+<link rel="stylesheet" href="{{ '/assets/site/css/tokens/colors.css' | relative_url }}">
+<link rel="stylesheet" href="{{ '/assets/site/css/tokens/typography.css' | relative_url }}">
+<link rel="stylesheet" href="{{ '/assets/site/css/tokens/spacing.css' | relative_url }}">
+<link rel="stylesheet" href="{{ '/assets/site/css/tokens/base.css' | relative_url }}">
+<link rel="stylesheet" href="{{ '/assets/site/css/site.css' | relative_url }}">
+<link rel="icon" href="{{ '/assets/site/images/favicon.svg' | relative_url }}" type="image/svg+xml">
+<link rel="icon" href="{{ '/assets/site/images/favicon.png' | relative_url }}" type="image/png" sizes="48x48">
+<link rel="apple-touch-icon" href="{{ '/assets/site/images/apple-touch-icon.png' | relative_url }}">
+{%- if page.url == "/" %}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareSourceCode",
+  "name": "reminisce",
+  "description": {{ site.description | jsonify }},
+  "url": {{ "/" | absolute_url | jsonify }},
+  "codeRepository": {{ site.repository_url | jsonify }},
+  "programmingLanguage": "Elixir",
+  "license": "https://www.apache.org/licenses/LICENSE-2.0",
+  "author": { "@type": "Organization", "@id": "https://open.noeticecho.space/#org", "name": "NoeticEcho", "url": "https://open.noeticecho.space/" }
+}
+</script>
+{%- endif %}

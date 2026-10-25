@@ -19,7 +19,7 @@ you.
 
 NoeticEcho runs no service for the plugin. There is no account to make, no
 fee, and nothing that NoeticEcho receives from your use of it. Your
-memories are in the TypeDB you choose; the [privacy page](privacy.html)
+memories are in the TypeDB you choose; the [privacy page](privacy.md)
 says what is stored and where.
 
 ## Your data, your responsibility

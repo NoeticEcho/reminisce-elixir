@@ -10,25 +10,37 @@ The plugin is `noetic-reminisce`. It is the Claude Code plugin of
 [reminisce](https://github.com/NoeticEcho/reminisce-elixir), an open-source
 Elixir library for agent memory on TypeDB, under the Apache License 2.0.
 
-- [Privacy](privacy.html): what is stored, where, and what forgetting does
+- [Privacy](privacy.md): what is stored, where, and what forgetting does
   and does not do.
-- [Terms](terms.html).
+- [Terms](terms.md).
 
 ## What you need
 
 - Claude Code.
 - macOS 13 or newer (Apple silicon or Intel), or Linux with glibc 2.28 or
   newer (x86_64 or arm64). Windows is not supported.
-- `curl`, `tar`, and `sha256sum` or `shasum`, which macOS and most Linux
-  systems have.
+- `curl`, with the `ca-certificates` package (without it curl cannot check
+  github.com's certificate), `tar`, and `sha256sum` or `shasum`. macOS has
+  them all; a minimal Linux image may lack `curl` and `ca-certificates`.
 - A TypeDB 3.12 or later that you run. If you have none, the setup step
-  starts one for you with Docker, on this machine only.
+  starts one for you with Docker, on this machine only: Docker must then be
+  installed and running, with its compose plugin (`docker compose version`
+  answers).
 
 ## Installing and setting up
 
-1. **Install the plugin.** There is no marketplace listing yet. For now,
-   start Claude Code from a checkout of the repository with
-   `claude --plugin-dir ./plugin`.
+1. **Install the plugin.** In Claude Code, from a clone of the repository,
+   for a session:
+
+   ```sh
+   git clone https://github.com/NoeticEcho/reminisce-elixir.git
+   cd reminisce-elixir
+   claude --plugin-dir ./plugin
+   ```
+
+   Once it is listed in Anthropic's plugin directory, add it from
+   **Customize > Plugins** on claude.ai, or in Claude Code with `/plugin`.
+   It is not listed yet: until it is, the clone is the way.
 2. **Fill in its settings.** Claude Code asks for four:
 
    | Setting | What it is | Default |
@@ -51,11 +63,17 @@ Elixir library for agent memory on TypeDB, under the Apache License 2.0.
    it. If the script says the download does not hold the server, or that
    its SHA-256 does not match, nothing was installed: run the step again,
    and if it fails the same way, report it (below).
-4. **Start a TypeDB, if you have none.** The same step gives you two lines
-   to run in your own terminal. The first reads the password you chose
-   without showing it; the second starts TypeDB 3.12.1 with Docker on
+4. **Start a TypeDB, if you have none.** The same step gives you three
+   lines to run in your own terminal. The first reads the password you
+   chose without showing it; the second hands it to the script, and to
+   nothing else; the third starts TypeDB 3.12.1 with Docker on
    `127.0.0.1:8000`, replaces its default admin password with yours, and
    creates the database. Claude does not see the password.
+
+   If port 8000 is taken, by a TypeDB you already run for instance, put
+   `REMINISCE_TYPEDB_PORT=` with a free port, such as
+   `REMINISCE_TYPEDB_PORT=8001`, in front of the third line's `sh`, and set
+   `typedb_url` to match: `http://127.0.0.1:8001`.
 5. **Connect.** Reconnect the server with `/mcp`, or restart Claude Code.
    `/mcp` shows `reminisce` as connected when it works.
 
@@ -106,7 +124,7 @@ its own password.
 `memory_forget` takes a memory out of recall. It does not delete it: the
 words stay in your database, `memory_why` still explains it, and a recall
 "as of" a time before it was forgotten still finds it. The plugin has no
-tool that deletes a memory. The [privacy page](privacy.html#forgetting)
+tool that deletes a memory. The [privacy page](privacy.md#forgetting)
 says what to do when something must be gone.
 
 ## Updating

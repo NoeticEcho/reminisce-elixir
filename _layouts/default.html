@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="{{ site.lang | default: 'en' }}" data-theme="ink">
+<head>
+{% include head.html %}
+</head>
+<body>
+<a class="skip" href="#content">Skip to the content</a>
+{% include header.html %}
+<div class="docs">
+  <details class="docmenu">
+    <summary>Contents{% if page.title %} <span>{{ page.title }}</span>{% endif %}</summary>
+    <nav aria-label="Documentation">{% include nav.html %}</nav>
+  </details>
+  <nav class="docnav" aria-label="Documentation">{% include nav.html %}</nav>
+  <main class="doc" id="content">
+    {%- if page.source != false and page.path %}
+    <p class="source"><a href="{{ site.repository_url }}/blob/{{ site.branch }}/{{ page.path }}">{{ page.path }} on GitHub</a></p>
+    {%- endif %}
+    <article class="article" lang="{{ page.lang | default: site.lang | default: 'en' }}">
+{% include content.html html=content %}
+    </article>
+  </main>
+</div>
+{% include footer.html %}
+<script src="{{ '/assets/site/theme.js' | relative_url }}" defer></script>
+</body>
+</html>

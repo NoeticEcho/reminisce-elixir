@@ -1,0 +1,88 @@
+# SPDX-FileCopyrightText: 2026 NoeticEcho and the reminisce contributors
+# SPDX-License-Identifier: Apache-2.0
+
+# The documentation site, built by GitHub Pages' own Jekyll from main, at the root.
+# Nothing here is needed to use reminisce; it only turns the Markdown into pages. It is not in
+# the Hex package, and assets/site/README.md says where its design comes from.
+#
+# The Markdown files carry no front matter and must not need any: titles come from the first
+# heading (jekyll-titles-from-headings), README.md is the index of its directory
+# (jekyll-readme-index), and links between .md files become links between pages
+# (jekyll-relative-links). A link to anything that is not a page (a source file, a script, a
+# licence, a directory without a README) is pointed at the file on GitHub by
+# _includes/content.html.
+
+title: reminisce
+description: >-
+  Agent memory on TypeDB: an Elixir library with an MCP face. It remembers with time,
+  provenance and scope, recalls deterministically, explains each memory, and never deletes one.
+url: https://open.noeticecho.space
+baseurl: /reminisce-elixir
+lang: en
+repository: NoeticEcho/reminisce-elixir
+repository_url: https://github.com/NoeticEcho/reminisce-elixir
+branch: main
+logo: https://open.noeticecho.space/icon-512.png
+
+# jekyll-seo-tag reads title, description, url, baseurl, lang and logo. There is no social
+# preview for reminisce yet, so the pages set no image.
+
+markdown: kramdown
+kramdown:
+  input: GFM
+  hard_wrap: false
+
+plugins:
+  - jekyll-seo-tag
+  - jekyll-sitemap
+  - jekyll-relative-links
+  - jekyll-optional-front-matter
+  - jekyll-readme-index
+  - jekyll-titles-from-headings
+  - jekyll-default-layout
+
+relative_links:
+  enabled: true
+  collections: false
+
+titles_from_headings:
+  enabled: true
+  strip_title: false
+  collections: false
+
+readme_index:
+  enabled: true
+  remove_originals: true
+
+defaults:
+  - scope:
+      path: ""
+    values:
+      layout: default
+
+# What is not a page. The pages are README.md, docs/ and plugin/README.md; the code, the
+# scripts, the tests and the plugin's own files are read on GitHub, where they are versioned
+# and highlighted. Files and directories whose name starts with a dot are left out by Jekyll.
+exclude:
+  - LICENSE
+  - NOTICE
+  - mix.exs
+  - mix.lock
+  - bench/
+  - config/
+  - lib/
+  - rel/
+  - scripts/
+  - test/
+  - plugin/LICENSE
+  - plugin/NOTICE
+  - plugin/bin/
+  - plugin/scripts/
+  - plugin/server.sha256
+  - plugin/skills/
+  - plugin/typedb/
+  - assets/site/README.md
+  - Gemfile
+  - Gemfile.lock
+  - node_modules/
+  - vendor/

@@ -76,7 +76,7 @@ defmodule Reminisce.MCP.CLI do
   @spec serve(map()) :: :ok | {:error, String.t()}
   def serve(config) do
     with :ok <- logs_to_stderr(),
-         {:ok, store} <- ready(config) do
+         {:ok, store} <- quietly(fn -> ready(config) end) do
       {kind, _key} = config.owner
       Logger.info("reminisce MCP server: serving one #{kind} owner on #{config.database}")
       run(store, config.owner)
@@ -96,8 +96,8 @@ defmodule Reminisce.MCP.CLI do
     config = %{config | create: true}
 
     with :ok <- logs_to_stderr(),
-         :ok <- replace_default_password(config),
-         {:ok, _store} <- ready(config) do
+         :ok <- quietly(fn -> replace_default_password(config) end),
+         {:ok, _store} <- quietly(fn -> ready(config) end) do
       IO.puts(
         :stderr,
         "reminisce: the database #{config.database} on TypeDB at #{config.url} is set up"
@@ -123,12 +123,18 @@ defmodule Reminisce.MCP.CLI do
     store = Reminisce.Store.new(Reminisce.MCP.Conn, config.database)
 
     with :ok <- logs_to_stderr(),
-         {:ok, _} <- connect(Reminisce.MCP.Conn, config, config.password),
-         :ok <- version(config),
-         :ok <- database(config),
+         :ok <- quietly(fn -> upgradable(config) end),
          {:ok, dir} <- upgrade_backup(store, config),
          {:ok, answer} <- upgrade_store(store, config, dir) do
       IO.puts(:stderr, upgraded(config, dir, answer))
+    end
+  end
+
+  defp upgradable(config) do
+    with {:ok, _} <- connect(Reminisce.MCP.Conn, config, config.password),
+         :ok <- version(config),
+         {:ok, :exists} <- database(config) do
+      :ok
     end
   end
 
@@ -230,14 +236,40 @@ defmodule Reminisce.MCP.CLI do
 
   # Connects, checks the server's version, the sign-in and the database, and
   # sets the database up. Every refusal is a sentence that says what to do.
+  # A database it creates is named on stderr: a typo in --database makes a
+  # new, empty one, and that line is the only sign of it.
   defp ready(config) do
     store = Reminisce.Store.new(Reminisce.MCP.Conn, config.database)
 
     with {:ok, _} <- connect(Reminisce.MCP.Conn, config, config.password),
          :ok <- version(config),
-         :ok <- database(config),
+         {:ok, found} <- database(config),
          :ok <- setup(store, config) do
+      if found == :absent do
+        IO.puts(
+          :stderr,
+          "reminisce: created database #{config.database} on TypeDB at #{config.url}: " <>
+            "it did not exist. If you meant one that does, check the database setting " <>
+            "(--database)"
+        )
+      end
+
       {:ok, store}
+    end
+  end
+
+  # While the server starts, only errors are logged: its refusals are
+  # sentences of their own, and the driver's retries and warnings before them
+  # (a TypeDB that does not answer) would only bury them. The level is put back
+  # before the server serves.
+  defp quietly(fun) do
+    level = Logger.level()
+    Logger.configure(level: :error)
+
+    try do
+      fun.()
+    after
+      Logger.configure(level: level)
     end
   end
 
@@ -287,10 +319,10 @@ defmodule Reminisce.MCP.CLI do
   defp database(config) do
     case TypeDB.Database.get(Reminisce.MCP.Conn, config.database) do
       {:ok, _} ->
-        :ok
+        {:ok, :exists}
 
       {:error, %TypeDB.Error{status: 404}} when config.create ->
-        :ok
+        {:ok, :absent}
 
       {:error, %TypeDB.Error{status: 404}} ->
         {:error,

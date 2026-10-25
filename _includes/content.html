@@ -1,0 +1,55 @@
+{%- comment -%}
+  The page's HTML, with every relative link that does not lead to a page of this site pointed at
+  GitHub instead.
+
+  jekyll-relative-links has already turned each link to a .md file into a root-relative URL
+  ("/reminisce-elixir/docs/spec.html"). What is still relative after it is a link to something
+  the site does not publish: the library's code, a script, a licence, or a directory. A directory
+  whose README is a page here ("plugin/") keeps its link; any other directory goes to its tree on
+  GitHub, and a file to its blob. Without this those links would be 404s on the site while they
+  work on GitHub, and the Markdown must not be edited to suit the site.
+
+  Usage, in a layout: include content.html, passing the page content as html.
+{%- endcomment -%}
+{%- assign repo = site.repository_url | append: "/" -%}
+{%- assign branch = site.branch | default: "main" -%}
+{%- assign parts = include.html | split: ' href="' -%}
+{%- capture rewritten -%}
+{{- parts[0] -}}
+{%- for part in parts offset: 1 -%}
+  {%- assign href = part | split: '"' | first -%}
+  {%- assign rest = part | remove_first: href -%}
+  {%- assign head = href | slice: 0, 1 -%}
+  {%- assign relative = true -%}
+  {%- if href == "" or head == "/" or head == "#" or href contains ":" -%}{%- assign relative = false -%}{%- endif -%}
+  {%- if relative -%}
+    {%- assign clean = href | split: "#" | first -%}
+    {%- assign segments = page.dir | append: clean | split: "/" -%}
+    {%- assign stack = "" | split: "" -%}
+    {%- for segment in segments -%}
+      {%- if segment == ".." -%}
+        {%- assign stack = stack | pop -%}
+      {%- elsif segment != "" and segment != "." -%}
+        {%- assign stack = stack | push: segment -%}
+      {%- endif -%}
+    {%- endfor -%}
+    {%- assign path = stack | join: "/" -%}
+    {%- assign last = clean | slice: -1, 1 -%}
+    {%- if last == "/" -%}
+      {%- assign dir_url = "/" | append: path | append: "/" -%}
+      {%- assign dir_page = site.pages | where: "url", dir_url | first -%}
+      {%- if dir_page -%}
+        {%- assign target = dir_url | relative_url -%}
+      {%- else -%}
+        {%- assign target = repo | append: "tree/" | append: branch | append: "/" | append: path -%}
+      {%- endif -%}
+    {%- else -%}
+      {%- assign target = repo | append: "blob/" | append: branch | append: "/" | append: path -%}
+    {%- endif -%}
+{{ ' href="' }}{{ target }}{{ rest }}
+  {%- else -%}
+{{ ' href="' }}{{ part }}
+  {%- endif -%}
+{%- endfor -%}
+{%- endcapture -%}
+{{- rewritten -}}

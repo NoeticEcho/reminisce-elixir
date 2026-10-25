@@ -1,0 +1,9 @@
+<header class="top">
+  <a class="brand" href="https://open.noeticecho.space/" aria-label="NoeticEcho open source, home">NoeticEcho <span>reminisce</span></a>
+  <nav aria-label="Site">
+    <a href="https://open.noeticecho.space/#open">Projects</a>
+    <a href="{{ '/' | relative_url }}"{% if page.url == "/" %} aria-current="page"{% endif %}>Docs</a>
+    <a href="{{ site.repository_url }}">GitHub</a>
+  </nav>
+  <button class="mode" id="mode" type="button" hidden aria-live="polite">reading <b id="modeName">ink</b></button>
+</header>

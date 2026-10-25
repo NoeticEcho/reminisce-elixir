@@ -1,0 +1,112 @@
+/* GENERATED from tokens/tokens.dtcg.json by tokens/build.js — do not edit by hand. */
+:root {
+  --ink-100: #121113;                                                                                                               /* recessed instrument body */
+  --ink-200: #1A181B;                                                                                                               /* raised instrument body / panel fill */
+  --ink-300: #262329;                                                                                                               /* hover fill, inset tracks */
+  --ink-000: #0A0B09;                                                                                                               /* canvas, near-black, slightly warm */
+  --rule-600: #45453F;                                                                                                              /* hairlines, separators */
+  --ash-300: #B3AFA3;                                                                                                               /* body text on dark */
+  --ash-400: #98948A;                                                                                                               /* secondary text, engraved labels — 6.4:1 on ink-000 */
+  --paper-100: #E9E3D2;                                                                                                             /* primary text, mineral paper */
+  --paper-050: #F4F0E7;                                                                                                             /* rare highlight surface */
+  --brass-300: #E4CDA0;
+  --brass-500: #C9A66B;
+  --brass-700: #8A6F3F;
+  --brass-900: #4A3B21;
+  --oxide: #B85C32;                                                                                                                 /* action / mutation / command */
+  --verdigris: #4D776D;                                                                                                             /* system state / stable world */
+  --saffron: #C6A447;                                                                                                               /* attention / discovery / insight */
+  --bruise: #5D536B;                                                                                                                /* uncertainty / unresolved */
+  --violet-500: #7A5C9E;                                                                                                            /* transition / liminal / active destination */
+  --violet-300: #B39BD1;
+  --echo-400: #8FB7D6;                                                                                                              /* Echo presence — cold trace light */
+  --echo-200: #C7DCEC;
+  --crt-amber: #F0B04A;                                                                                                             /* phosphor readout on instrument screens only */
+  --oxide-300: #BE6B44;                                                                                                             /* oxide as TEXT — the base pigment is 4.33:1 on the raised panel (--ink-200), the lightest ground a pigment sits on, below the floor */
+  --verdigris-300: #648980;                                                                                                         /* verdigris as TEXT — the base pigment is 3.92:1 on the raised panel (--ink-200), the lightest ground a pigment sits on */
+  --bruise-300: #867E90;                                                                                                            /* bruise as TEXT — the base pigment is 2.74:1 on the raised panel (--ink-200), the lightest ground a pigment sits on, far below the floor */
+  --violet-400: #8F76AE;                                                                                                            /* violet as TEXT — violet-500 is 3.62:1 on the raised panel (--ink-200), the lightest ground a pigment sits on */
+
+  --surface-canvas: var(--ink-000);
+  --surface-body: var(--ink-100);
+  --surface-panel: rgba(12, 11, 13, 0.62);                                                                                          /* over scene imagery — an alpha the primitive ramp does not carry */
+  --surface-panel-solid: var(--ink-200);
+  --surface-inset: var(--ink-300);
+  --surface-paper: var(--paper-100);                                                                                                /* Paper Mode */
+
+  --border-hairline: rgba(233, 227, 210, 0.16);                                                                                     /* the system's signature line */
+  --border-rule: var(--rule-600);
+  --border-brass: rgba(201, 166, 107, 0.55);
+  --border-focus: var(--brass-300);
+
+  --text-primary: var(--paper-100);
+  --text-body: var(--ash-300);
+  --text-secondary: var(--ash-400);
+  --text-muted: #848179;                                                                                                            /* Solid, not an alpha. rgba(141,138,128,0.6) composited to 2.66:1 on a raised panel and only looked safe because the probe ignored the alpha channel. Muted now sits close to secondary — this palette has little room below it, and a tier that fails is worse than a tier that is subtle. */
+  --text-on-brass: #0A0B09;   /* pinned: the brass fill does not invert, so its ink must not either */
+  --text-on-paper: var(--ink-000);
+  --text-link: var(--brass-300);
+  --text-link-hover: var(--paper-050);
+
+  --accent-measure: var(--brass-500);
+  --accent-command: var(--oxide);
+  --accent-state: var(--verdigris);
+  --accent-insight: var(--saffron);
+  --accent-unknown: var(--bruise);
+  --accent-transition: var(--violet-500);
+  --accent-echo: var(--echo-400);
+  --accent-command-text: var(--oxide-300);                                                                                          /* Use whenever the pigment is the colour of type. The base accent stays for borders, fills and marks, where 3:1 is the floor. */
+  --accent-state-text: var(--verdigris-300);                                                                                        /* as above */
+  --accent-unknown-text: var(--bruise-300);                                                                                         /* as above */
+  --accent-transition-text: var(--violet-400);                                                                                      /* as above */
+
+  --scrim-bottom: linear-gradient(180deg, rgba(10,11,9,0) 0%, rgba(10,11,9,0.55) 45%, rgba(10,11,9,0.92) 100%);
+  --scrim-top: linear-gradient(180deg, rgba(10,11,9,0.7) 0%, rgba(10,11,9,0) 100%);
+
+  --light-focused: 0 0 0 1px rgba(228,205,160,.35), 0 0 22px rgba(201,166,107,.22);
+  --light-resonating: 0 0 0 1px rgba(143,183,214,.35), 0 0 26px rgba(143,183,214,.24);
+  --glow-brass: 0 0 24px rgba(201,166,107,0.28);
+  --glow-echo: 0 0 28px rgba(143,183,214,0.30);
+
+  --crt-glass: radial-gradient(120% 100% at 50% 0%, rgba(240,176,74,0.10) 0%, rgba(240,176,74,0.02) 45%, rgba(10,11,9,0.55) 100%);
+  --crt-scan: repeating-linear-gradient(180deg, rgba(10,11,9,0.32) 0 1px, transparent 1px 3px);
+  --enamel-plate: linear-gradient(176deg, #232025 0%, #17151A 60%, #1D1A20 100%);
+  --enamel-bevel: inset 0 1px 0 rgba(233,227,210,0.10), inset 0 -1px 0 rgba(10,11,9,0.8);
+  --stamp-ink: #CA855B;
+  --brass-fill: linear-gradient(180deg, var(--brass-300), var(--brass-500) 55%, #8F7547);                                           /* The primary action's fill. Its end stop is 4% lighter than --brass-700 because ink text on brass-700 is 4.16:1 — below the floor. brass-700 itself is unchanged and stays the border, where the floor is 3:1. */
+}
+
+/* paper — Paper Mode remaps the neutral ramp and darkens brass so it still reads as metal on light. */
+[data-theme="paper"] {
+  --ink-000: #E9E3D2;
+  --ink-100: #EFE9DA;
+  --ink-200: #F4F0E7;
+  --ink-300: #DCD5C2;
+  --rule-600: #B8B09C;
+  --ash-400: #5F5C53;   /* was #67645A: 4.62:1 flat but 4.31:1 over the brass wash the instruments use */
+  --ash-300: #4A4841;
+  --paper-100: #0A0B09;
+  --paper-050: #000000;
+  --saffron: #755C15;   /* the ink saffron is 1.86:1 on paper — it carries text on the contradiction and partial notices */
+  --brass-300: #6E5528;
+  --brass-500: #7C6134;   /* was #8A6F3F: 3.70:1 on paper canvas, under the floor for the marks and numerals that use it as ink */
+  --brass-700: #C9A66B;
+  --surface-panel: rgba(244,240,231,0.8);
+  --border-hairline: rgba(10,11,9,0.16);
+  --border-brass: rgba(138,111,63,0.6);
+  --text-muted: #655F52;   /* was #7A7669: 3.54:1 on paper canvas — muted is still text */
+  --stamp-ink: #975228;
+  --echo-400: #36668B;
+  --violet-300: #5E3F86;
+  --scrim-bottom: linear-gradient(180deg, rgba(233,227,210,0) 0%, rgba(233,227,210,.9) 100%);
+  /* --crt-amber is NOT overridden: --crt-bed stays dark in Paper Mode, so darkening the phosphor
+     put amber on a dark bed at 4.31:1. A CRT is a device, not a reading surface — it looks the
+     same in any room, which is also what "the world is always ink" already says. */
+  --enamel-plate: linear-gradient(176deg, #F4F0E7, #E4DDCB);
+  --enamel-bevel: inset 0 1px 0 rgba(255,255,255,0.7), inset 0 -1px 0 rgba(10,11,9,0.12);
+  --oxide-300: #9A4522;
+  --verdigris-300: #3A5E55;
+  --bruise-300: #4A4256;
+  --violet-400: #5E3F86;
+  --brass-fill: linear-gradient(180deg, #C9A66B, #A98A52 55%, #8F7547);
+}

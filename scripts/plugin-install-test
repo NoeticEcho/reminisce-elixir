@@ -1,0 +1,210 @@
+#!/bin/sh
+# SPDX-FileCopyrightText: 2026 NoeticEcho and the reminisce contributors
+# SPDX-License-Identifier: Apache-2.0
+#
+# The plugin as a user installs it, on this machine (Linux or macOS): installs
+# the plugin's server with the plugin's own install script, sets a TypeDB up
+# as the plugin's setup step does, and drives the plugin's MCP server, started
+# as the plugin's manifest starts it: initialize, its eight tools, then
+# remember, recall, why and forget, and a second session that recalls what
+# the first kept. Every step is printed; the run fails at the first one that
+# does not do what it should. The release workflow runs it on macOS and Linux
+# (.github/workflows/release.yml, the install job).
+#
+#   scripts/plugin-install-test [--tarball FILE] [--typedb docker|URL]
+#
+#   --tarball FILE  the server tarball for this machine, with FILE.sha256
+#                   beside it, as scripts/build-server and the release make
+#                   them. Its checksum is pinned in the copy's server.sha256,
+#                   as a release pins it, and install-server checks the file
+#                   against that pin. When the plugin already pins this
+#                   machine's tarball, FILE is not used: install-server
+#                   downloads the release's, and checks it against the pin.
+#                   Without --tarball, install-server downloads the server
+#                   from the GitHub release of the plugin's version.
+#   --typedb docker the plugin's typedb/first-run starts a TypeDB with Docker
+#                   (compose project reminisce-install-test, port
+#                   REMINISCE_INSTALL_TEST_PORT, default 18000), removed with
+#                   its data at the end. The default.
+#   --typedb URL    a TypeDB 3.12 or later at URL that still has TypeDB's
+#                   default admin password, such as one just started from
+#                   TypeDB's own archive. The installed server replaces that
+#                   password and creates the database, as first-run does.
+#
+# The plugin is the one committed at HEAD, copied out of the repository. The
+# TypeDB password is made for the run, passed through the environment only,
+# and checked to be in none of the output.
+
+set -eu
+
+root=$(cd "$(dirname "$0")/.." && pwd -P)
+tarball=
+typedb=docker
+port=${REMINISCE_INSTALL_TEST_PORT:-18000}
+project=reminisce-install-test
+
+fail() {
+  printf 'FAILED: %s\n' "$*" >&2
+  exit 1
+}
+step() { printf '\n== %s\n' "$*"; }
+
+while [ $# -gt 0 ]; do
+  case $1 in
+  --tarball | --typedb)
+    [ $# -ge 2 ] || fail "$1 needs a value"
+    if [ "$1" = --tarball ]; then tarball=$2; else typedb=$2; fi
+    shift 2
+    ;;
+  *) fail "unknown argument: $1 (see the comment at the top of $0)" ;;
+  esac
+done
+
+case $typedb in
+docker) url=http://127.0.0.1:$port ;;
+http://* | https://*) url=$typedb ;;
+*) fail "--typedb is docker or a URL, not $typedb" ;;
+esac
+
+if [ -n "$tarball" ]; then
+  [ -f "$tarball" ] || fail "no tarball at $tarball"
+  [ -f "$tarball.sha256" ] || fail "no checksum at $tarball.sha256"
+  tarball=$(cd "$(dirname "$tarball")" && pwd -P)/$(basename "$tarball")
+fi
+
+stage=$(mktemp -d)
+cleanup() {
+  if [ "$typedb" = docker ]; then
+    docker compose -p "$project" -f "$stage/plugin/typedb/compose.yaml" down --volumes >/dev/null 2>&1 || true
+  fi
+  rm -rf "$stage"
+}
+trap cleanup EXIT
+trap 'exit 130' INT TERM
+
+TYPEDB_PASSWORD=$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')
+export TYPEDB_PASSWORD
+
+step "the machine"
+echo "system: $(uname -s) $(uname -r), $(uname -m)"
+for tool in curl tar; do
+  command -v "$tool" >/dev/null 2>&1 || fail "$tool is not installed"
+done
+if command -v sha256sum >/dev/null 2>&1; then
+  echo "sha256sum: $(command -v sha256sum)"
+else
+  command -v shasum >/dev/null 2>&1 || fail "neither sha256sum nor shasum is installed"
+  echo "shasum: $(command -v shasum)"
+fi
+echo "$(curl --version | head -n 1)"
+
+step "the plugin, as installed: no server yet"
+git -C "$root" archive HEAD plugin | tar -x -C "$stage"
+plugin=$stage/plugin
+echo "plugin at $plugin, committed at $(git -C "$root" rev-parse HEAD)"
+# The plugin's version is mix.exs's (test/plugin/plugin_test.exs holds them
+# to that), and install-server downloads that version's tarball.
+version=$(sed -n 's/^  @version "\([^"]*\)"$/\1/p' "$root/mix.exs")
+[ -n "$version" ] || fail "no version in mix.exs"
+case $(uname -s) in Darwin) os=macos ;; *) os=linux ;; esac
+case $(uname -m) in aarch64 | arm64) arch=arm64 ;; *) arch=x86_64 ;; esac
+name=reminisce-mcp-$version-$os-$arch.tar.gz
+status=0
+"$plugin/bin/reminisce-mcp" --owner user:install --database reminisce </dev/null >"$stage/out" 2>"$stage/err" || status=$?
+cat "$stage/err"
+[ "$status" = 1 ] || fail "the launcher without a server exited $status, not 1"
+[ ! -s "$stage/out" ] || fail "the launcher without a server wrote to stdout"
+echo "(the launcher exits 1 and says how to install the server)"
+
+step "install the server, as /noetic-reminisce:setup does"
+pinned=$(awk -v name="$name" '$1 !~ /^#/ && $2 == name { print $1 }' "$plugin/server.sha256")
+if [ -n "$pinned" ]; then
+  echo "the plugin pins $name: installing the release's, checked against the pin"
+  sh "$plugin/scripts/install-server"
+elif [ -n "$tarball" ]; then
+  [ "$(basename "$tarball")" = "$name" ] || fail "$tarball is not $name, this machine's tarball for $version"
+  sha=$(awk -v name="$name" '$2 == name || $2 == "*" name { print $1 }' "$tarball.sha256")
+  [ -n "$sha" ] || fail "$tarball.sha256 has no line for $name"
+  echo "pinning $name as a release does: $sha"
+  printf '%s  %s\n' "$sha" "$name" >>"$plugin/server.sha256"
+  sh "$plugin/scripts/install-server" --file "$tarball"
+else
+  sh "$plugin/scripts/install-server"
+fi
+du -sh "$plugin/server" | sed 's/[[:space:]].*/ unpacked/'
+
+if [ "$typedb" = docker ]; then
+  step "TypeDB, by the plugin's first-run, with Docker"
+  REMINISCE_TYPEDB_PORT=$port REMINISCE_TYPEDB_PROJECT=$project sh "$plugin/typedb/first-run"
+else
+  step "TypeDB at $url: its default password replaced and the database made, as first-run does"
+  TYPEDB_URL=$url TYPEDB_USERNAME=admin \
+    "$plugin/server/bin/reminisce-mcp" --init --replace-default-password --database reminisce
+fi
+
+# The plugin's MCP server, as its manifest starts it: the launcher, with the
+# owner and database settings as arguments and TypeDB's in the environment.
+mcp() {
+  TYPEDB_URL=$url TYPEDB_USERNAME=admin \
+    "$plugin/bin/reminisce-mcp" --owner user:install --database reminisce
+}
+
+session() {
+  printf '%s\n' "$@" >"$stage/in"
+  status=0
+  mcp <"$stage/in" >"$stage/out" 2>"$stage/err" || status=$?
+  while IFS= read -r line; do printf -- '-> %s\n' "$line"; done <"$stage/in"
+  while IFS= read -r line; do printf -- '<- %s\n' "$line"; done <"$stage/out"
+  sed 's/^/stderr: /' "$stage/err"
+  [ "$status" = 0 ] || fail "the server exited $status when its input ended"
+  if grep -v '"jsonrpc":"2.0"' "$stage/out" | grep -q .; then fail "stdout holds something other than JSON-RPC"; fi
+  if grep -q '"isError":true' "$stage/out"; then fail "a tool answered with an error"; fi
+  if grep -qF "$TYPEDB_PASSWORD" "$stage/out" "$stage/err"; then fail "the password is in the server's output"; fi
+}
+
+# The answer to request id $1.
+reply() { grep "\"id\":$1[,}]" "$stage/out" || fail "no answer to request $1"; }
+
+init='{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"plugin-install-test","version":"1"}}}'
+initialized='{"jsonrpc":"2.0","method":"notifications/initialized"}'
+
+step "session 1: initialize, the tools, remember, recall, why, forget"
+session "$init" "$initialized" \
+  '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' \
+  '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"memory_remember","arguments":{"key":"deploy-rule","content":"Deploys need a green main branch.","aspects":["procedural"],"basis":"told","sources":["session:install-1"]}}}' \
+  '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"memory_remember","arguments":{"key":"friday-deploy","content":"The Friday deploy waits, because main is red.","aspects":["episodic"],"basis":"inferred","derived_from":["deploy-rule"]}}}' \
+  '{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"memory_recall","arguments":{"query":"when can we deploy main","k":5}}}' \
+  '{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"memory_why","arguments":{"key":"friday-deploy"}}}' \
+  '{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"memory_forget","arguments":{"key":"friday-deploy","status":"forgotten","reason":"main is green again"}}}' \
+  '{"jsonrpc":"2.0","id":8,"method":"tools/call","params":{"name":"memory_recall","arguments":{"query":"when can we deploy main","k":5}}}'
+
+reply 1 | grep -q "\"version\":\"$version\"" || fail "initialize did not name the server's version, $version"
+tools=$(reply 2 | grep -o '"name":"memory_[a-z_]*"' | sort -u | tr '\n' ' ')
+wanted='"name":"memory_affect" "name":"memory_forget" "name":"memory_fulfil" "name":"memory_intend" "name":"memory_persona" "name":"memory_recall" "name":"memory_remember" "name":"memory_why" '
+[ "$tools" = "$wanted" ] || fail "tools/list names $tools, not the eight tools"
+reply 2 | grep -q '"enum":\["episodic","semantic","procedural","autobiographical","prospective"\]' ||
+  fail "tools/list does not name the store's aspects"
+reply 3 | grep -q 'deploy-rule' || fail "remember did not answer with its key"
+reply 4 | grep -q 'friday-deploy' || fail "remember did not answer with its key"
+reply 5 | grep -q 'deploy-rule' || fail "recall did not find deploy-rule"
+reply 5 | grep -q 'friday-deploy' || fail "recall did not find friday-deploy"
+reply 6 | grep -q 'ancestors' || fail "why gave no ancestors"
+reply 6 | grep -q 'deploy-rule' || fail "why did not name what friday-deploy was derived from"
+reply 6 | grep -q 'inferred' || fail "why did not give the basis"
+reply 7 | grep -q '"status":"forgotten"' || fail "forget did not answer the status forgotten"
+reply 8 | grep -q 'deploy-rule' || fail "recall after forget did not find deploy-rule"
+if reply 8 | grep -q 'friday-deploy'; then fail "recall after forget still found friday-deploy"; fi
+echo "checked: version $version; eight tools and the store's aspects; both memories kept; recall finds both; why derives friday-deploy from deploy-rule; forget takes it out of recall"
+
+step "session 2: a new server process recalls what session 1 kept"
+session "$init" "$initialized" \
+  '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"memory_recall","arguments":{"query":"green main","k":5}}}' \
+  '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"memory_why","arguments":{"key":"friday-deploy"}}}'
+reply 2 | grep -q 'deploy-rule' || fail "a new session did not recall deploy-rule"
+reply 3 | grep -q '"status":"forgotten"' || fail "a new session's why did not say friday-deploy is forgotten"
+echo "checked: the memories outlive the server process, and forgetting is kept"
+
+step "the password"
+echo "checked: it is in none of the server's output, stdout or stderr, in either session"
+
+printf '\nINSTALL TEST PASSED: %s\n' "$name"

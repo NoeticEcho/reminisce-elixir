@@ -1,7 +1,7 @@
 {
   "name": "noetic-reminisce",
   "displayName": "reminisce",
-  "version": "0.5.2",
+  "version": "0.5.3",
   "description": "Memory that stays yours. Claude remembers what you ask it to keep, recalls it by its words, and answers why it remembers something from what was recorded at the time. Your memories go nowhere else than your own TypeDB. Setup downloads the server from GitHub and the TypeDB image from Docker Hub; it sends them nothing about you or your memories.",
   "author": {
     "name": "NoeticEcho",

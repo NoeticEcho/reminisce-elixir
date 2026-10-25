@@ -1,0 +1,32 @@
+# SPDX-FileCopyrightText: 2026 NoeticEcho and the reminisce contributors
+# SPDX-License-Identifier: Apache-2.0
+
+# The documentation's navigation, in reading order. Each url is a page's URL without the
+# baseurl; _includes/nav.html adds it. A README is the page of its directory. An url with a
+# scheme leaves the site and is written as it is.
+- group: reminisce
+  items:
+    - title: Overview
+      url: /
+    - title: The specification
+      url: /docs/spec.html
+    - title: The server artifact
+      url: /docs/server-artifact.html
+    - title: Changelog
+      url: /docs/CHANGELOG.html
+- group: The plugin
+  items:
+    - title: Overview
+      url: /docs/plugin/
+    - title: Privacy
+      url: /docs/plugin/privacy.html
+    - title: Terms
+      url: /docs/plugin/terms.html
+- group: Elsewhere
+  items:
+    - title: GitHub
+      url: https://github.com/NoeticEcho/reminisce-elixir
+    - title: Hex
+      url: https://hex.pm/packages/reminisce
+    - title: HexDocs
+      url: https://hexdocs.pm/reminisce

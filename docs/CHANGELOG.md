@@ -4,6 +4,51 @@ reminisce follows [Semantic Versioning](https://semver.org/). While it is
 `0.x`, a minor version may change the public API; every such change is listed
 here.
 
+## 0.5.3 (2026-10-25)
+
+Nothing in the library's API changed. The MCP server says more of what a
+client needs, and the plugin is ready to be listed.
+
+### The MCP server
+
+- `memory_remember` and `memory_recall` name the store's aspects: in
+  `tools/list`, as the enum of `aspects` and in its description, and in the
+  error that refuses an aspect, as `"allowed"`. A store set up with its own
+  aspects lists those; `memory_recall` adds `affective`.
+- A database the server creates because it did not exist is named on
+  stderr, with the TypeDB it is on and a word to check the database setting
+  if one that exists was meant.
+- While it starts (connecting, checking the version, the password and the
+  database) it logs only errors, so a normal start prints nothing.
+
+### The plugin
+
+- Its pages say what it needs (macOS 13 or Linux with glibc 2.28, `curl`
+  with `ca-certificates`, `tar`, a SHA-256 tool, and Docker with compose for
+  the TypeDB the setup step starts), how to run that TypeDB on another port
+  with `REMINISCE_TYPEDB_PORT` and a `typedb_url` to match, and how to
+  install it: from a clone with `--plugin-dir ./plugin` until it is listed
+  in Anthropic's plugin directory. The README has a section on the one
+  credential it uses, TypeDB's admin password.
+- `scripts/install-server` says to install `ca-certificates` when curl
+  cannot check a certificate (curl's exit 77).
+- `typedb/first-run`, on a failed run, no longer stops a TypeDB that it did
+  not start and that already refuses the default password.
+- `server.sha256` pins the four server tarballs from 0.5.3 on, in a second
+  commit made once the release is published: a release's own commit cannot
+  pin tarballs built after it is tagged. The next release is cut only on
+  top of that commit.
+- The release workflow installs the plugin as a user does, from the
+  release's own tarball, on macOS arm64, macOS x86_64 and Linux x86_64, and
+  runs a memory through it in two sessions; it can also be run by hand.
+
+### The documentation site
+
+- <https://open.noeticecho.space/reminisce-elixir/> is built by GitHub
+  Pages from this repository's Markdown, in the NoeticEcho design: the
+  README, the plugin's pages, the specification, the server artifact and
+  this changelog. None of it is in the Hex package.
+
 ## 0.5.2 (2026-10-24)
 
 - Nothing in the library or the server changed: 0.5.2 is 0.5.1 with a release test that holds again. The release workflow failed on all four platforms, for 0.5.0 and for 0.5.1, on the test that what the server's VM prints itself reaches stderr and never the MCP stream: it passed its extra VM flag through `RELEASE_VM_ARGS`, which `bin/reminisce-mcp` clears, so the VM never saw the flag and printed nothing. It now starts a copy of the release whose `vm.args` adds `-init_debug`, which makes the VM print on stdout as it boots, and finds that on stderr and nothing but JSON-RPC on stdout. So neither 0.5.0 nor 0.5.1 has server downloads, and neither was published to Hex; 0.5.2 is the release.

@@ -291,8 +291,39 @@ defmodule Reminisce.MCP.Server do
 
   @allowed MapSet.new(@tools, & &1["name"])
 
-  @doc "The tool declarations, as data."
+  @doc """
+  The tool declarations, as data. Given a store, `memory_remember`'s and
+  `memory_recall`'s `aspects` name that store's aspects, as an enum and in
+  their description: what `tools/list` answers.
+  """
   def tools, do: @tools
+
+  def tools(%Reminisce.Store{} = store) do
+    Enum.map(@tools, fn
+      %{"name" => "memory_remember"} = tool -> with_aspects(tool, remember_aspects(store))
+      %{"name" => "memory_recall"} = tool -> with_aspects(tool, recall_aspects(store))
+      tool -> tool
+    end)
+  end
+
+  defp with_aspects(tool, allowed) do
+    update_in(tool, ["inputSchema", "properties", "aspects"], fn schema ->
+      schema
+      |> Map.put("items", Map.put(@aspect, "enum", allowed))
+      |> Map.put("description", aspects_description(tool["name"], allowed))
+    end)
+  end
+
+  defp aspects_description("memory_remember", allowed),
+    do: "What kind of memory this is, one or more of: #{Enum.join(allowed, ", ")}."
+
+  defp aspects_description("memory_recall", allowed),
+    do: "Only memories with one of these aspects: #{Enum.join(allowed, ", ")}."
+
+  # What each tool's aspects accept: Reminisce.remember/3 takes the store's,
+  # and Reminisce.recall/4 the store's and `affective`.
+  defp remember_aspects(store), do: Enum.map(store.aspects, &Atom.to_string/1)
+  defp recall_aspects(store), do: remember_aspects(store) ++ ["affective"]
 
   defstruct [:store, :owner, focus: %Focus{}, started: false]
 
@@ -691,7 +722,7 @@ defmodule Reminisce.MCP.Server do
       case method do
         "initialize" -> {{:ok, initialize()}, state}
         "ping" -> {{:ok, %{}}, state}
-        "tools/list" -> {{:ok, %{"tools" => @tools}}, state}
+        "tools/list" -> {{:ok, %{"tools" => tools(state.store)}}, state}
         "tools/call" -> call(state, params)
         "notifications/" <> _ -> {:notification, state}
         _ -> {{:error, -32601, "Method not found"}, state}
@@ -809,7 +840,10 @@ defmodule Reminisce.MCP.Server do
       |> Enum.reject(fn {_k, v} -> is_nil(v) end)
       |> Map.new()
 
-    state.store |> Reminisce.remember(state.owner, attrs) |> reply(&Output.memory/1)
+    state.store
+    |> Reminisce.remember(state.owner, attrs)
+    |> reply(&Output.memory/1)
+    |> allowed_aspects(remember_aspects(state.store))
   end
 
   # An intention is memory_remember with the aspect fixed and the trigger
@@ -851,7 +885,7 @@ defmodule Reminisce.MCP.Server do
         {reply({:ok, answer}, &Output.recall/1), %{state | focus: answer.focus, started: true}}
 
       error ->
-        {reply(error, &Output.recall/1), state}
+        {error |> reply(&Output.recall/1) |> allowed_aspects(recall_aspects(state.store)), state}
     end
   end
 
@@ -978,6 +1012,16 @@ defmodule Reminisce.MCP.Server do
 
   defp facet(%{"name" => n, "value" => v}), do: {n, v}
   defp facet(other), do: other
+
+  # A refused aspect names the ones the tool takes: tools/list says them too,
+  # but a client may not show the schema to the model.
+  defp allowed_aspects(
+         %{"structuredContent" => %{"error" => "invalid", "detail" => "aspects"}},
+         allowed
+       ),
+       do: tool_error(%{"error" => "invalid", "detail" => "aspects", "allowed" => allowed})
+
+  defp allowed_aspects(result, _allowed), do: result
 
   defp reply({:ok, value}, to_map), do: tool_ok(to_map.(value))
   defp reply({:error, reason}, _to_map), do: tool_error(Output.error(reason))

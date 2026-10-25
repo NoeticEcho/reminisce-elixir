@@ -324,7 +324,7 @@ defmodule Reminisce.Plugin.SkillsTest do
 
       says!(
         "remember",
-        "A host can configure others; the server takes the ones its store has and refuses any other with `invalid`."
+        "A host can configure others; the server takes the ones its store has, lists them in the tool's schema, and refuses any other with `invalid`, naming the ones it takes in `allowed`."
       )
 
       default = ~w(episodic semantic procedural autobiographical prospective)a
@@ -335,7 +335,10 @@ defmodule Reminisce.Plugin.SkillsTest do
       other = fresh_store(%{}, aspects: [:recipe])
       on_exit(fn -> drop(other) end)
 
-      assert [{:ok, _}, {:error, %{"error" => "invalid", "detail" => "aspects"}}] =
+      assert [
+               {:ok, _},
+               {:error, %{"error" => "invalid", "detail" => "aspects", "allowed" => ["recipe"]}}
+             ] =
                tools(other, [
                  remember("Bake at 180.", aspects: ["recipe"]),
                  remember("Bake at 200.", aspects: ["semantic"])
