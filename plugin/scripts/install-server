@@ -8,12 +8,14 @@
 # directory, where bin/reminisce-mcp starts it. Nothing that does not match
 # the checksum is unpacked.
 #
-# The checksum is, first that wins:
-#   - the one given with --sha256;
-#   - the one this plugin pins in server.sha256, beside this directory;
-#   - the one in the release's own .sha256 file, downloaded beside the
-#     tarball. That one finds a damaged download, not a release whose files
-#     were replaced; the script says so when it uses it.
+# The checksum is:
+#   - the one this plugin pins in server.sha256, beside this directory, on
+#     the one line that names this machine's tarball. One given with
+#     --sha256 must be the same, or nothing is installed;
+#   - with no line pinned, the one given with --sha256;
+#   - with neither, the one in the release's own .sha256 file, downloaded
+#     beside the tarball. That one finds a damaged download, not a release
+#     whose files were replaced; the script says so when it uses it.
 #
 # It runs only when the user runs it (the plugin's setup step); nothing in
 # the plugin runs it at session start. Running it again installs the same
@@ -68,9 +70,6 @@ esac
 name=reminisce-mcp-$version-$os-$arch
 tarball=$name.tar.gz
 
-if [ -z "$sha" ]; then
-  sha=$(awk -v name="$tarball" '$1 !~ /^#/ && $2 == name { print $1 }' "$root/server.sha256")
-fi
 
 if command -v sha256sum >/dev/null 2>&1; then
   sha256() { sha256sum "$1" | cut -d' ' -f1; }
@@ -80,13 +79,27 @@ else
   fail "neither sha256sum nor shasum is installed, so the server cannot be checked"
 fi
 
+# check_sha HEX [WHERE]: HEX is a SHA-256, or the script stops.
 check_sha() {
-  case $sha in
-  *[!0-9a-f]* | '') fail "not a SHA-256 in lower-case hex: $sha" ;;
+  case $1 in
+  *[!0-9a-f]* | '') fail "not a SHA-256 in lower-case hex: $1${2:+ ($2)}" ;;
   esac
-  [ ${#sha} -eq 64 ] || fail "not a SHA-256 in lower-case hex: $sha"
+  [ ${#1} -eq 64 ] || fail "not a SHA-256 in lower-case hex: $1${2:+ ($2)}"
 }
-[ -z "$sha" ] || check_sha
+[ -z "$sha" ] || check_sha "$sha"
+
+pins=$root/server.sha256
+[ -f "$pins" ] || fail "there is no $pins: this plugin is not whole. Nothing was installed."
+count=$(awk -v name="$tarball" '$1 !~ /^#/ && $2 == name { n++ } END { print n + 0 }' "$pins")
+[ "$count" -le 1 ] ||
+  fail "$pins names $tarball on $count lines, and must on one at most. Nothing was installed."
+pinned=$(awk -v name="$tarball" '$1 !~ /^#/ && $2 == name { print $1 }' "$pins")
+if [ -n "$pinned" ]; then
+  check_sha "$pinned" "the line for $tarball in $pins"
+  [ -z "$sha" ] || [ "$sha" = "$pinned" ] ||
+    fail "--sha256 gives $sha for $tarball, but this plugin pins $pinned in $pins: the two must be the same. Nothing was installed."
+  sha=$pinned
+fi
 
 work=$(mktemp -d "$root/.install-server.XXXXXX")
 trap 'rm -rf "$work"' EXIT
@@ -117,7 +130,7 @@ else
     get "$work/$tarball.sha256" "$url.sha256" ||
       fail "the download of $url.sha256 failed; its reason is above. Nothing was installed."
     sha=$(awk -v name="$tarball" '$2 == name { print $1 }' "$work/$tarball.sha256")
-    check_sha
+    check_sha "$sha" "$url.sha256"
   fi
 
   say "downloading $url"

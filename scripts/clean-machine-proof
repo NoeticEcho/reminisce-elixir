@@ -14,7 +14,10 @@
 #   --tarball FILE  the server tarball for this machine, with FILE.sha256
 #                   beside it, as scripts/build-server and the release make
 #                   them. Without it, the install script downloads the server
-#                   from the GitHub release of the plugin's version.
+#                   from the GitHub release of the plugin's version. On a
+#                   plugin that pins its server, FILE must be the release's:
+#                   the install script refuses a checksum that is not the
+#                   pinned one.
 #   --image IMAGE   the clean machine (default: Debian 13 slim, pinned by
 #                   digest, as the release workflow's bare test uses).
 #

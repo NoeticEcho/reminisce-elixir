@@ -4,6 +4,31 @@ reminisce follows [Semantic Versioning](https://semver.org/). While it is
 `0.x`, a minor version may change the public API; every such change is listed
 here.
 
+## 0.5.4 (2026-10-25)
+
+Nothing in the library or the server changed. 0.5.4 is 0.5.3 with plugin
+tests that hold on a plugin that pins its server, and an install script
+that no longer joins two checksums into one.
+
+- 0.5.3's second commit, which pins the plugin's server (its four tarballs'
+  SHA-256 in `plugin/server.sha256`), turned the public CI red. The plugin's
+  tests ran `scripts/install-server` on a copy of the plugin that kept those
+  four lines and then added the line of the test's own tarball, so the copy
+  named this machine's tarball twice. The script took both lines as one
+  value and refused it as `not a SHA-256 in lower-case hex`. A real install
+  from that commit was not affected: it has one line per tarball. The tests
+  now write the copy's `server.sha256` themselves, pinning nothing and
+  pinning four tarballs, and each runs with both.
+- `scripts/install-server` refuses a `server.sha256` that names this
+  machine's tarball on more than one line, and a pinned line that is not a
+  SHA-256. A checksum given with `--sha256`, as for an install from a
+  tarball that is already on the machine, must be the pinned one when the
+  plugin pins one: the script refuses it otherwise and names both. Before,
+  a given checksum was taken over the pinned one.
+- `server.sha256` pins nothing in this release's own commit, whose
+  tarballs are built after it is tagged; as for 0.5.3, a second commit pins
+  them once the release is published.
+
 ## 0.5.3 (2026-10-25)
 
 Nothing in the library's API changed. The MCP server says more of what a
