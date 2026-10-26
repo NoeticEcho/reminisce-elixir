@@ -5,7 +5,7 @@
 # Installs the reminisce server this plugin starts: downloads the tarball
 # for this plugin's version and this machine from the version's GitHub
 # release, checks its SHA-256, and unpacks it into the plugin's server/
-# directory, where bin/reminisce-mcp starts it. Nothing that does not match
+# directory, where scripts/reminisce-mcp starts it. Nothing that does not match
 # the checksum is unpacked.
 #
 # The checksum is:

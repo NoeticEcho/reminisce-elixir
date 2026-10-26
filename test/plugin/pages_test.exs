@@ -228,7 +228,7 @@ defmodule Reminisce.Plugin.PagesTest do
         quoted |> String.split("...") |> Enum.map(&String.trim/1) |> Enum.reject(&(&1 == ""))
 
       for w <- words do
-        assert cli =~ w or File.read!("plugin/bin/reminisce-mcp") =~ w,
+        assert cli =~ w or File.read!("plugin/scripts/reminisce-mcp") =~ w,
                "the server does not say: #{w}"
       end
     end

@@ -76,7 +76,6 @@ exclude:
   - test/
   - plugin/LICENSE
   - plugin/NOTICE
-  - plugin/bin/
   - plugin/scripts/
   - plugin/server.sha256
   - plugin/skills/

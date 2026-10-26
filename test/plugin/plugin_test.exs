@@ -62,7 +62,7 @@ defmodule Reminisce.Plugin.PluginTest do
       manifest = manifest()
 
       assert %{"reminisce" => server} = manifest["mcpServers"]
-      assert server["command"] == "${CLAUDE_PLUGIN_ROOT}/bin/reminisce-mcp"
+      assert server["command"] == "${CLAUDE_PLUGIN_ROOT}/scripts/reminisce-mcp"
       assert server["args"] == ~w(--owner ${user_config.owner} --database ${user_config.database})
 
       assert server["env"] == %{
@@ -88,6 +88,17 @@ defmodule Reminisce.Plugin.PluginTest do
 
       refute File.exists?(Path.join(@plugin, "hooks"))
       refute File.exists?(Path.join(@plugin, ".mcp.json"))
+    end
+
+    # Claude's plugin directory holds a plugin with a top-level bin/ for a
+    # person to review, and does not offer it in Cowork or the Claude apps.
+    test "has no bin/, and starts a readable shell script inside the plugin" do
+      refute File.exists?(Path.join(@plugin, "bin"))
+
+      "${CLAUDE_PLUGIN_ROOT}/" <> path = manifest()["mcpServers"]["reminisce"]["command"]
+      assert path == "scripts/reminisce-mcp"
+      assert "#!/bin/sh\n" <> _ = File.read!(Path.join(@plugin, path))
+      assert executable?(Path.join(@plugin, path))
     end
   end
 
@@ -147,11 +158,11 @@ defmodule Reminisce.Plugin.PluginTest do
     refute text =~ ~r/TYPEDB_PASSWORD=\S/
   end
 
-  describe "bin/reminisce-mcp" do
+  describe "scripts/reminisce-mcp" do
     setup :copy
 
     test "without the server, says how to install it, and starts nothing", %{root: root} do
-      {out, status, err} = sh(Path.join(root, "bin/reminisce-mcp"), ["--owner", "user:a"])
+      {out, status, err} = sh(Path.join(root, "scripts/reminisce-mcp"), ["--owner", "user:a"])
 
       assert status == 1
       assert out == ""
@@ -165,7 +176,7 @@ defmodule Reminisce.Plugin.PluginTest do
       {_, 0, _} = offline(root, tarball, sha)
 
       {out, status, _} =
-        sh(Path.join(root, "bin/reminisce-mcp"), ["--owner", "user:a b", "--database", ""],
+        sh(Path.join(root, "scripts/reminisce-mcp"), ["--owner", "user:a b", "--database", ""],
           input: "line one\nline two\n"
         )
 

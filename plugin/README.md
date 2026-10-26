@@ -110,7 +110,7 @@ releases from 0.5.2 on; an earlier plugin version finds none.
 
 | What | When | Where it sends data |
 |---|---|---|
-| `bin/reminisce-mcp`, the plugin's MCP server | Each session, once the server is installed | Only to the TypeDB at `typedb_url`, signed in as `admin` with `typedb_password` |
+| `scripts/reminisce-mcp`, the plugin's MCP server | Each session, once the server is installed | Only to the TypeDB at `typedb_url`, signed in as `admin` with `typedb_password` |
 | `scripts/install-server` | When you say yes in the setup step | An HTTPS GET from github.com, and from the host GitHub redirects release files to. It sends nothing about you or your memories. |
 | `typedb/first-run` | When you run it in your terminal | Docker pulls the TypeDB image, pinned by digest, from Docker Hub. The TypeDB it starts listens on 127.0.0.1 only, with its usage and error reports turned off. |
 
@@ -127,7 +127,7 @@ anonymous.
 | Who has the password | How it gets it | What it does with it |
 |---|---|---|
 | Claude Code | You type it into the `typedb_password` setting, which is marked sensitive | Keeps it in your system's secure storage, and passes it to the plugin's MCP server only, as `TYPEDB_PASSWORD` in its environment |
-| `bin/reminisce-mcp`, the MCP server | `TYPEDB_PASSWORD`, from Claude Code | Signs in to the TypeDB at `typedb_url` with it, and sends it nowhere else. It never writes it to its output or its logs |
+| `scripts/reminisce-mcp`, the MCP server | `TYPEDB_PASSWORD`, from Claude Code | Signs in to the TypeDB at `typedb_url` with it, and sends it nowhere else. It never writes it to its output or its logs |
 | `typedb/first-run` | `TYPEDB_PASSWORD`, set by the lines you run in your own terminal, which read it without showing it | Gives it to the TypeDB it starts, in place of TypeDB's default password. Claude does not see it |
 
 Use a password of its own for this TypeDB, not one you use anywhere else.

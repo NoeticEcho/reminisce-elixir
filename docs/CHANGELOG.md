@@ -4,6 +4,25 @@ reminisce follows [Semantic Versioning](https://semver.org/). While it is
 `0.x`, a minor version may change the public API; every such change is listed
 here.
 
+## 0.5.5 (2026-10-26)
+
+Nothing in the library or the server changed. 0.5.5 is 0.5.4 with the
+plugin's launcher moved out of a top-level `bin/`.
+
+- The plugin directory's review of 0.5.4 flagged two things that came from
+  `plugin/bin/` alone: a plugin that ships files in `bin/` is held for a
+  person to review, and a plugin with a top-level `bin/` cannot be
+  installed in Cowork or the desktop and mobile apps, so the listing was
+  greyed out there. The launcher, a plain POSIX shell script, is now
+  `plugin/scripts/reminisce-mcp`, and the manifest starts it by that path
+  in the plugin's directory. It does what it did: it starts the server
+  that `scripts/install-server` installed, and downloads nothing. A test
+  holds the plugin to having no `bin/`.
+- `scripts/install-server` still downloads the server, only when the user
+  runs it in the setup step.
+- `server.sha256` pins nothing in this release's own commit; as for 0.5.4,
+  a second commit pins the server once the release is published.
+
 ## 0.5.4 (2026-10-25)
 
 Nothing in the library or the server changed. 0.5.4 is 0.5.3 with plugin

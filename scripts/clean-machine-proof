@@ -144,7 +144,7 @@ cp -R /proof/plugin /root/plugin
 plugin=/root/plugin
 echo "plugin at $plugin, committed at $COMMIT"
 status=0
-"$plugin/bin/reminisce-mcp" --owner user:proof --database reminisce </dev/null >/tmp/out 2>/tmp/err || status=$?
+"$plugin/scripts/reminisce-mcp" --owner user:proof --database reminisce </dev/null >/tmp/out 2>/tmp/err || status=$?
 cat /tmp/err
 [ "$status" = 1 ] || fail "the launcher without a server exited $status, not 1"
 [ ! -s /tmp/out ] || fail "the launcher without a server wrote to stdout"
@@ -165,7 +165,7 @@ REMINISCE_TYPEDB_PORT=$PORT REMINISCE_TYPEDB_PROJECT=$PROJECT sh "$plugin/typedb
 # owner and database settings as arguments and TypeDB's in the environment.
 mcp() {
   TYPEDB_URL=http://127.0.0.1:$PORT TYPEDB_USERNAME=admin \
-    "$plugin/bin/reminisce-mcp" --owner user:proof --database reminisce
+    "$plugin/scripts/reminisce-mcp" --owner user:proof --database reminisce
 }
 
 session() {

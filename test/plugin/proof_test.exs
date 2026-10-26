@@ -37,7 +37,11 @@ defmodule Reminisce.Plugin.ProofTest do
         |> String.replace("${user_config.database}", "reminisce")
       end)
 
-    assert String.replace(command, ~s("$plugin/bin/reminisce-mcp"), "$plugin/bin/reminisce-mcp") ==
+    assert String.replace(
+             command,
+             ~s("$plugin/scripts/reminisce-mcp"),
+             "$plugin/scripts/reminisce-mcp"
+           ) ==
              expected
 
     assert env ==

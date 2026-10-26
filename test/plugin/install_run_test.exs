@@ -32,7 +32,11 @@ defmodule Reminisce.Plugin.InstallRunTest do
         |> String.replace("${user_config.database}", "reminisce")
       end)
 
-    assert String.replace(command, ~s("$plugin/bin/reminisce-mcp"), "$plugin/bin/reminisce-mcp") ==
+    assert String.replace(
+             command,
+             ~s("$plugin/scripts/reminisce-mcp"),
+             "$plugin/scripts/reminisce-mcp"
+           ) ==
              expected
 
     assert env == "TYPEDB_URL=$url TYPEDB_USERNAME=#{server["env"]["TYPEDB_USERNAME"]}"

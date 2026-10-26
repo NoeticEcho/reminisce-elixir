@@ -110,7 +110,7 @@ case $(uname -s) in Darwin) os=macos ;; *) os=linux ;; esac
 case $(uname -m) in aarch64 | arm64) arch=arm64 ;; *) arch=x86_64 ;; esac
 name=reminisce-mcp-$version-$os-$arch.tar.gz
 status=0
-"$plugin/bin/reminisce-mcp" --owner user:install --database reminisce </dev/null >"$stage/out" 2>"$stage/err" || status=$?
+"$plugin/scripts/reminisce-mcp" --owner user:install --database reminisce </dev/null >"$stage/out" 2>"$stage/err" || status=$?
 cat "$stage/err"
 [ "$status" = 1 ] || fail "the launcher without a server exited $status, not 1"
 [ ! -s "$stage/out" ] || fail "the launcher without a server wrote to stdout"
@@ -146,7 +146,7 @@ fi
 # owner and database settings as arguments and TypeDB's in the environment.
 mcp() {
   TYPEDB_URL=$url TYPEDB_USERNAME=admin \
-    "$plugin/bin/reminisce-mcp" --owner user:install --database reminisce
+    "$plugin/scripts/reminisce-mcp" --owner user:install --database reminisce
 }
 
 session() {
