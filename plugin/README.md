@@ -47,19 +47,24 @@ And four skills:
 
 ## Setting it up
 
-0. **The plugin.** In Claude Code, from a clone of
-   [the repository](https://github.com/NoeticEcho/reminisce-elixir), for a
-   session:
+0. **The plugin.** It is installed from the project's own marketplace,
+   [the repository](https://github.com/NoeticEcho/reminisce-elixir) itself.
+   In Claude Code 2.1.275 or later, in one step:
 
-   ```sh
-   git clone https://github.com/NoeticEcho/reminisce-elixir.git
-   cd reminisce-elixir
-   claude --plugin-dir ./plugin
+   ```text
+   /plugin install noetic-reminisce --marketplace NoeticEcho/reminisce-elixir
    ```
 
-   Once it is listed in Anthropic's plugin directory, add it from
-   **Customize > Plugins** on claude.ai, or in Claude Code with `/plugin`.
-   It is not listed yet: until it is, the clone is the way.
+   Claude Code asks you to confirm the marketplace, then shows the plugin
+   and asks where to install it. In any version, the same in two steps:
+
+   ```text
+   /plugin marketplace add NoeticEcho/reminisce-elixir
+   /plugin install noetic-reminisce@noeticecho
+   ```
+
+   To try it for one session without installing it, start Claude Code from
+   a clone with `claude --plugin-dir ./plugin`.
 1. **The settings.** Installing the plugin asks for four:
    - `owner`: whose memory this is, written `kind:key`, such as `user:alice`;
    - `database`: the TypeDB database, `reminisce` unless you change it;
@@ -102,6 +107,10 @@ And four skills:
    project (`reminisce-typedb_data`); `down --volumes` would delete it.
 4. **Connect.** Reconnect the server with `/mcp`, or restart Claude Code.
 
+Claude Code does not update a plugin from a marketplace like this one by
+itself: choose **Update now** on the plugin in the **Installed** tab of
+`/plugin`, or turn on auto-update for `noeticecho` in its **Marketplaces**
+tab.
 After the plugin updates, run `/noetic-reminisce:setup` again: the server it
 installed belongs to the old version. Server downloads exist only for
 releases from 0.5.2 on; an earlier plugin version finds none.

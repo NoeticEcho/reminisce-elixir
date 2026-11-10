@@ -4,7 +4,7 @@
 defmodule Reminisce.MixProject do
   use Mix.Project
 
-  @version "0.5.5"
+  @version "0.5.6"
   @source_url "https://github.com/NoeticEcho/reminisce-elixir"
 
   def project do

@@ -29,18 +29,24 @@ Elixir library for agent memory on TypeDB, under the Apache License 2.0.
 
 ## Installing and setting up
 
-1. **Install the plugin.** In Claude Code, from a clone of the repository,
-   for a session:
+1. **Install the plugin.** It is installed from the project's own
+   marketplace, the [repository](https://github.com/NoeticEcho/reminisce-elixir)
+   itself, named `noeticecho`. In Claude Code 2.1.275 or later, in one step:
 
-   ```sh
-   git clone https://github.com/NoeticEcho/reminisce-elixir.git
-   cd reminisce-elixir
-   claude --plugin-dir ./plugin
+   ```text
+   /plugin install noetic-reminisce --marketplace NoeticEcho/reminisce-elixir
    ```
 
-   Once it is listed in Anthropic's plugin directory, add it from
-   **Customize > Plugins** on claude.ai, or in Claude Code with `/plugin`.
-   It is not listed yet: until it is, the clone is the way.
+   Claude Code asks you to confirm the marketplace, then shows the plugin
+   and asks where to install it. In any version, the same in two steps:
+
+   ```text
+   /plugin marketplace add NoeticEcho/reminisce-elixir
+   /plugin install noetic-reminisce@noeticecho
+   ```
+
+   To try it for one session without installing it, start Claude Code from
+   a clone of the repository with `claude --plugin-dir ./plugin`.
 2. **Fill in its settings.** Claude Code asks for four:
 
    | Setting | What it is | Default |
@@ -128,6 +134,11 @@ tool that deletes a memory. The [privacy page](privacy.md#forgetting)
 says what to do when something must be gone.
 
 ## Updating
+
+Claude Code does not update a plugin from a marketplace like `noeticecho`
+by itself: choose **Update now** on the plugin in the **Installed** tab of
+`/plugin`, or turn on auto-update for `noeticecho` in its **Marketplaces**
+tab.
 
 Each version of the plugin has its own copy of the server. After the
 plugin updates, the server says it is not installed: type

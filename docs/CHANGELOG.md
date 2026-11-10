@@ -4,6 +4,24 @@ reminisce follows [Semantic Versioning](https://semver.org/). While it is
 `0.x`, a minor version may change the public API; every such change is listed
 here.
 
+## 0.5.6 (2026-11-10)
+
+Nothing in the library or the server changed: an application that uses
+reminisce from Hex or git has no reason to upgrade. 0.5.6 is for the
+plugin, which can now be installed rather than only loaded from a clone.
+
+- The repository is a plugin marketplace of its own, named `noeticecho`:
+  a marketplace file at its root lists the plugin in `plugin/`. Add the
+  marketplace with `/plugin marketplace add NoeticEcho/reminisce-elixir`,
+  then install with `/plugin install noetic-reminisce@noeticecho`. The
+  plugin's README and its documentation page give the one-step form as
+  well, and how to update it: from a marketplace like this one, a plugin
+  updates when asked to, or by itself once its auto-update is turned on.
+- The plugin's icon is a 1024×1024 PNG, rendered from its SVG, which
+  stays beside it; the manifest names the PNG.
+- `server.sha256` pins nothing in this release's own commit; as for 0.5.5,
+  a second commit pins the server once the release is published.
+
 ## 0.5.5 (2026-10-26)
 
 Nothing in the library or the server changed. 0.5.5 is 0.5.4 with the

@@ -1,0 +1,16 @@
+{
+  "name": "noeticecho",
+  "description": "NoeticEcho's plugins for Claude Code: reminisce, a memory that stays yours, kept in your own TypeDB.",
+  "owner": {
+    "name": "NoeticEcho",
+    "url": "https://github.com/NoeticEcho"
+  },
+  "plugins": [
+    {
+      "name": "noetic-reminisce",
+      "source": "./plugin",
+      "description": "Memory that stays yours. Claude remembers what you ask it to keep, recalls it by its words, and answers why it remembers something. The memories live in your own TypeDB.",
+      "category": "memory"
+    }
+  ]
+}

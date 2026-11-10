@@ -40,7 +40,19 @@ defmodule Reminisce.Plugin.PluginTest do
 
       assert [_ | _] = manifest["keywords"]
       assert %{"object_acted_on" => [_ | _]} = manifest["classification"]
-      assert File.regular?(Path.join(@plugin, manifest["icon"]))
+    end
+
+    # Plugin catalogs take a PNG or JPEG icon of 512 to 2048 pixels a side,
+    # not an SVG. The PNG is the SVG beside it, rendered at 1024x1024.
+    test "has a square PNG icon of 512 to 2048 pixels, rendered from the SVG beside it" do
+      icon = manifest()["icon"]
+      assert icon == "./.claude-plugin/icon.png"
+
+      assert <<137, "PNG", 13, 10, 26, 10, _::32, "IHDR", width::32, height::32, _::binary>> =
+               File.read!(Path.join(@plugin, icon))
+
+      assert width == height and width in 512..2048, "#{width}x#{height}"
+      assert File.regular?(Path.join(@plugin, ".claude-plugin/icon.svg"))
     end
 
     test "asks for the four settings, and keeps the password in secure storage" do
@@ -99,6 +111,43 @@ defmodule Reminisce.Plugin.PluginTest do
       assert path == "scripts/reminisce-mcp"
       assert "#!/bin/sh\n" <> _ = File.read!(Path.join(@plugin, path))
       assert executable?(Path.join(@plugin, path))
+    end
+  end
+
+  # The repository is the plugin's marketplace: the file at its root lists
+  # this one plugin, by the name its manifest gives, at ./plugin. Its owner
+  # is the project, with no address of a person.
+  test "the repository's marketplace lists this plugin by its own name, at ./plugin" do
+    root = Path.expand("..", @plugin)
+
+    market =
+      root |> Path.join(".claude-plugin/marketplace.json") |> File.read!() |> Jason.decode!()
+
+    assert market["name"] == "noeticecho"
+    assert market["owner"] == %{"name" => "NoeticEcho", "url" => "https://github.com/NoeticEcho"}
+    assert is_binary(market["description"])
+
+    assert [entry] = market["plugins"]
+    assert entry["name"] == manifest()["name"]
+    assert entry["source"] == "./plugin"
+    assert Path.expand(entry["source"], root) == @plugin
+
+    # The version is the manifest's alone: a second copy here would drift.
+    refute Map.has_key?(entry, "version")
+  end
+
+  # Where a person looks for how to install it, the marketplace's lines are.
+  test "the plugin's README and page give the marketplace's install lines" do
+    root = Path.expand("..", @plugin)
+
+    for path <- [Path.join(@plugin, "README.md"), Path.join(root, "docs/plugin/index.md")] do
+      text = File.read!(path)
+
+      assert text =~ "/plugin install noetic-reminisce --marketplace NoeticEcho/reminisce-elixir",
+             path
+
+      assert text =~ "/plugin marketplace add NoeticEcho/reminisce-elixir", path
+      assert text =~ "/plugin install noetic-reminisce@noeticecho", path
     end
   end
 
