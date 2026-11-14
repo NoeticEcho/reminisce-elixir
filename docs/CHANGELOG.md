@@ -4,6 +4,45 @@ reminisce follows [Semantic Versioning](https://semver.org/). While it is
 `0.x`, a minor version may change the public API; every such change is listed
 here.
 
+## 0.6.0 (2026-11-14)
+
+Two options a host asked for, both additive: nothing that worked before
+changes, and a 0.5 store needs no upgrade.
+
+- **An aspect that never decays.** A store's `decay:` takes
+  `exempt_aspects: [aspect]`. A memory with any of them keeps its salience
+  and its status through every `consolidate/3` pass, whatever its other
+  aspects, as a strand of the persona already did; the pure `decay/2` given
+  the same option returns its salience unchanged. A time constant could not
+  say "never": a memory decays at the longest constant of its aspects, so a
+  finite one still fades it, and `autobiographical`'s default is 730 days.
+  `Store.new/3` refuses an exempt aspect the store does not know, which would
+  otherwise exempt nothing in silence. `exempt_aspects: [:affective]` keeps
+  affects from fading and still lets them slow their objects, weighed at the
+  salience they keep: an affect that never fades must not stop slowing. Criterion 25 runs 800 days of passes
+  and checks that an autobiographical memory, alone or also semantic, keeps
+  its salience and stays active while an episode beside it goes inactive.
+- **A backup that leaves attributes out.** `backup/3` takes `omit:
+  [label]`: the host's attribute types it names are left out of
+  `schema.tql`, their declarations and every `owns` of them, and out of
+  `data.jsonl`, whose query never reads their values. It is for what a host
+  derives and can rebuild, such as an embedding: a vector attribute can be
+  defined only on a TypeDB build with vectors, so a backup that kept one
+  could be restored only onto such a build, and `restore/2` refuses a
+  vector value anyway. An omitted attribute must not be required on any
+  owner, and nothing else in the schema, a function included, may name it;
+  either is `{:error, {:cannot_omit, label}}`, and so is one of the
+  library's own attributes. Nothing is written then. The schema is edited
+  as TypeDB describes it, one clause a line; a text this cannot account for
+  leaves the label in it, and that refuses the backup rather than writing
+  a wrong one.
+- `backup/2` is `backup/3` with no options, and writes what it wrote.
+- `plugin/server.sha256` pins nothing in this release's own commit; the pin
+  commit writes 0.6.0's four lines once the release is published.
+- The plugin's install test expects the macOS arm64 runner the release
+  workflow has used since 0.5.6's run, `macos-15`; it still named the
+  retired `macos-14` and failed.
+
 ## 0.5.6 (2026-11-10)
 
 Nothing in the library or the server changed: an application that uses

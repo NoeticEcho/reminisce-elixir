@@ -570,9 +570,19 @@ defmodule Reminisce do
         Persona.Read.drift(store, agent, Keyword.take(opts, [:windows, :window_days, :at]))
       end)
 
-  @doc "Backs the whole database up into `dir`. See `Reminisce.Backup`."
-  @spec backup(Store.t(), Path.t()) :: {:ok, map()} | {:error, reason}
-  def backup(store, dir), do: Telemetry.span(:backup, nil, fn -> Backup.backup(store, dir) end)
+  @doc """
+  Backs the whole database up into `dir`. See `Reminisce.Backup`.
+
+  Options: `:omit`, attribute types of the host's to leave out of the backup
+  by label, such as a derived embedding: `backup(store, dir, omit:
+  ["embedding"])`. Their declarations, ownerships and values are all left
+  out, so the backup restores onto a server that could not define them.
+  """
+  @spec backup(Store.t(), Path.t(), keyword()) :: {:ok, map()} | {:error, reason}
+  def backup(store, dir, opts \\ []) do
+    opts = Keyword.take(opts, [:omit])
+    Telemetry.span(:backup, nil, fn -> Backup.backup(store, dir, opts) end)
+  end
 
   @doc "Restores a backup into an empty (or missing) database."
   @spec restore(Store.t(), Path.t()) :: {:ok, map()} | {:error, reason}

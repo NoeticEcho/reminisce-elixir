@@ -24,6 +24,17 @@ defmodule Reminisce.Backup do
 
   Attributes nothing owns are not instances of anything a backup records, and
   TypeDB discards them anyway.
+
+  **Leaving attributes out.** `backup/3` with `omit: [label]` writes a backup
+  without those attribute types: their declarations and every `owns` of them
+  are taken out of `schema.tql`, and their values out of `data.jsonl`. It is
+  for what a host derives and can rebuild, such as an embedding: a vector
+  attribute needs a TypeDB build with vectors to be defined at all, so a
+  backup that kept it could be restored only onto such a build. An omitted
+  attribute must not be `@card(1..)` on any owner, or the restore would
+  refuse its own data; and nothing else in the schema, a function included,
+  may name it. Either is `{:error, {:cannot_omit, label}}`, and nothing is
+  written. The library's own types cannot be omitted.
   """
 
   alias Reminisce.{DB, Introspect, Store}
@@ -36,8 +47,12 @@ defmodule Reminisce.Backup do
   # `opts[:between_reads]` is a test seam: it runs inside the snapshot,
   # between reading the attributes and reading the instances.
   def backup(%Store{} = store, dir, opts \\ []) do
-    with {:ok, schema} <- schema_text(store),
-         {:ok, lines} <- snapshot(store, opts[:between_reads] || fn -> :ok end),
+    omit = Keyword.get(opts, :omit, [])
+
+    with {:ok, omit} <- omittable(omit),
+         {:ok, schema} <- schema_text(store),
+         {:ok, schema} <- omit_schema(schema, omit),
+         {:ok, lines} <- snapshot(store, omit, opts[:between_reads] || fn -> :ok end),
          :ok <- write_file(dir, "schema.tql", schema),
          :ok <- write_file(dir, "data.jsonl", Enum.map(lines, &[encode(&1), "\n"])) do
       {entities, relations} = Enum.split_with(lines, &(&1["links"] == []))
@@ -61,17 +76,107 @@ defmodule Reminisce.Backup do
     end
   end
 
+  # -- omitting attributes -----------------------------------------------------
+
+  defp omittable(omit) when is_list(omit) do
+    library = MapSet.new(Reminisce.Schema.attributes(), &elem(&1, 0))
+
+    Enum.reduce_while(omit, {:ok, []}, fn label, {:ok, acc} ->
+      cond do
+        not is_binary(label) or not Regex.match?(@label, label) ->
+          {:halt, {:error, {:cannot_omit, label}}}
+
+        MapSet.member?(library, label) ->
+          {:halt, {:error, {:cannot_omit, label}}}
+
+        true ->
+          {:cont, {:ok, [label | acc]}}
+      end
+    end)
+    |> case do
+      {:ok, labels} -> {:ok, labels |> Enum.uniq() |> Enum.sort()}
+      error -> error
+    end
+  end
+
+  defp omittable(other), do: {:error, {:cannot_omit, other}}
+
+  # TypeDB describes a schema one clause a line: a type's declaration on its
+  # own line, then each `owns`, `plays` or `relates` on its own, the last one
+  # ending the statement with `;`. An omitted attribute's declaration is taken
+  # out whole, and so is each line that owns it, the statement's punctuation
+  # mended. Anything this cannot account for leaves the label somewhere in the
+  # text, and that refuses the backup rather than writing one that is wrong.
+  @doc false
+  def omit_schema(schema, []), do: {:ok, schema}
+
+  def omit_schema(schema, omit) do
+    case Enum.find(omit, &Regex.match?(~r/owns #{&1} @card\([1-9]/, schema)) do
+      nil -> omit_lines(schema, omit)
+      label -> {:error, {:cannot_omit, label}}
+    end
+  end
+
+  defp omit_lines(schema, omit) do
+    omitted =
+      Enum.reduce(omit, String.split(schema, "\n"), fn label, lines ->
+        lines |> drop_declaration(label) |> drop_ownerships(label)
+      end)
+      |> Enum.join("\n")
+
+    case Enum.find(omit, &Regex.match?(~r/(?<![A-Za-z0-9_-])#{&1}(?![A-Za-z0-9_-])/, omitted)) do
+      nil -> {:ok, omitted}
+      label -> {:error, {:cannot_omit, label}}
+    end
+  end
+
+  defp drop_declaration(lines, label) do
+    {kept, _dropping} =
+      Enum.reduce(lines, {[], false}, fn line, {acc, dropping} ->
+        cond do
+          dropping ->
+            {acc, not String.ends_with?(String.trim_trailing(line), ";")}
+
+          Regex.match?(~r/^attribute #{label}[,;]/, line) ->
+            {acc, not String.ends_with?(String.trim_trailing(line), ";")}
+
+          true ->
+            {[line | acc], false}
+        end
+      end)
+
+    Enum.reverse(kept)
+  end
+
+  # Taking out a statement's last clause moves its `;` to the clause before,
+  # or, when no clause is left, to the declaration line itself.
+  defp drop_ownerships(lines, label) do
+    owns = ~r/^\s+owns #{label}(\s[^,;]*)?([,;])\s*$/
+
+    Enum.reduce(lines, [], fn line, acc ->
+      case Regex.run(owns, line) do
+        [_, _, ";"] -> mend(acc)
+        [_ | _] -> acc
+        nil -> [line | acc]
+      end
+    end)
+    |> Enum.reverse()
+  end
+
+  defp mend([previous | rest]),
+    do: [String.replace(String.trim_trailing(previous), ~r/,$/, ";") | rest]
+
   # -- reading the instances ---------------------------------------------------
 
   # Every read of a backup happens in one read transaction, so the file is one
   # snapshot: a write that commits while the backup runs is in all of it or in
   # none of it.
-  defp snapshot(%Store{conn: conn, database: db}, between_reads) do
+  defp snapshot(%Store{conn: conn, database: db}, omit, between_reads) do
     TypeDB.transaction(conn, db, :read, fn tx ->
       read = fn query -> read_all(tx, query) end
 
       with {:ok, types} <- types(read) do
-        lines(read, types, between_reads)
+        lines(read, types, omit, between_reads)
       end
     end)
     |> case do
@@ -107,8 +212,8 @@ defmodule Reminisce.Backup do
     end
   end
 
-  defp lines(read, %{entities: entities, relations: relations}, between_reads) do
-    with {:ok, owned} <- attributes(read),
+  defp lines(read, %{entities: entities, relations: relations}, omit, between_reads) do
+    with {:ok, owned} <- attributes(read, omit),
          :ok <- between_reads.(),
          {:ok, players} <- players(read),
          {:ok, all} <- instances(read, entities ++ relations) do
@@ -145,8 +250,12 @@ defmodule Reminisce.Backup do
     end)
   end
 
-  defp attributes(read) do
-    with {:ok, rows} <- read.("match $x has $a;") do
+  # An omitted attribute is left out by the query itself, so its values (an
+  # embedding is kilobytes) are never read.
+  defp attributes(read, omit) do
+    without = Enum.map_join(omit, " ", &"not { $a isa #{&1}; };")
+
+    with {:ok, rows} <- read.("match $x has $a; #{without}") do
       {:ok,
        Enum.group_by(rows, & &1["x"].iid, fn row ->
          a = row["a"]

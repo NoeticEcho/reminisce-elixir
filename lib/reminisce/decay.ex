@@ -35,6 +35,15 @@ defmodule Reminisce.Decay do
     * `:inactive_below` — when set, a pass moves an active memory whose decayed
       salience falls below it to `:inactive`, reason `"decayed"`: its
       `unslowed_salience` once an affect has slowed it. Default `nil` (off).
+    * `:exempt_aspects` — aspects that never decay, default `[]`. A memory
+      with any of them keeps its salience and its status through every pass,
+      whatever its other aspects, as a strand of the persona does. An
+      exempt affect (`exempt_aspects: [:affective]`) still slows its object,
+      weighed at the salience it keeps. It is the
+      way to say "never": a time constant cannot, because a memory decays at
+      the longest constant of its aspects and a finite one still fades.
+      `[:autobiographical]` keeps an agent's account of who it has become out
+      of the pass entirely.
 
   Nothing here schedules anything: the host calls `Reminisce.consolidate/3`.
   """
@@ -61,6 +70,15 @@ defmodule Reminisce.Decay do
   """
   @spec decay(Memory.t(), keyword()) :: float()
   def decay(%Memory{} = m, opts) do
+    if exempt?(m.aspects, opts), do: m.salience || 0.5, else: decayed(m, opts)
+  end
+
+  @doc false
+  # Whether a memory with these aspects is out of every pass.
+  def exempt?(aspects, opts),
+    do: Enum.any?(aspects, &(&1 in Keyword.get(opts, :exempt_aspects, [])))
+
+  defp decayed(m, opts) do
     at = Keyword.fetch!(opts, :at)
     since = opts[:since] || latest([m.last_recalled_at, m.recorded_at])
     floor = Keyword.get(opts, :floor, 0.05)
@@ -143,12 +161,16 @@ defmodule Reminisce.Decay do
   defp walked(store, owner, at, previous, opts) do
     Read.each_page(store, owner, [as_of: at, scope: :all], [], fn page, acc ->
       # A strand of the DNA is neither decayed nor retired by a pass
-      # (docs/spec.md §C.2).
+      # (docs/spec.md §C.2), and neither is a memory with an exempt aspect.
+      # An exempt affect still slows its object, at the salience it keeps,
+      # so it stays in the walk, marked, and `updates/4` passes it by.
       found =
         for doc <- page,
             doc["status"] == "active",
             m = Memory.from_doc(doc),
-            :persona not in m.aspects do
+            :persona not in m.aspects,
+            not exempt?(m.aspects, opts) or :affective in m.aspects do
+          exempt = exempt?(m.aspects, opts)
           since = latest([m.last_recalled_at, m.recorded_at, previous])
           lite = %Memory{aspects: m.aspects, salience: m.salience}
 
@@ -165,7 +187,8 @@ defmodule Reminisce.Decay do
             memory: lite,
             unslowed: m.unslowed_salience,
             since: since,
-            affect: affect
+            affect: affect,
+            exempt: exempt
           }
         end
 
@@ -206,7 +229,7 @@ defmodule Reminisce.Decay do
   defp updates(walked, weights, erased, opts) do
     erased = MapSet.new(erased)
 
-    for %{key: key} = w <- walked, not MapSet.member?(erased, key) do
+    for %{key: key} = w <- walked, not w.exempt, not MapSet.member?(erased, key) do
       weight = Map.get(weights, key, 0)
       opts = since(opts, w.since)
       salience = decay(w.memory, Keyword.put(opts, :affect_weight, weight))

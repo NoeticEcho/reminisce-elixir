@@ -81,7 +81,7 @@ defmodule Reminisce.Plugin.InstallRunTest do
     assert job =~ "if: github.event_name != 'pull_request'"
 
     for {os, arch} <- [
-          {"macos-14", "arm64"},
+          {"macos-15", "arm64"},
           {"macos-15-intel", "x86_64"},
           {"ubuntu-24.04", "x86_64"}
         ] do

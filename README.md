@@ -2,7 +2,7 @@
 
 Agent memory on TypeDB: an Elixir library with an MCP face.
 
-Status: **0.5.6.** Its releases are on [Hex](https://hex.pm/packages/reminisce).
+Status: **0.6.0.** Its releases are on [Hex](https://hex.pm/packages/reminisce).
 While it is `0.x`, a minor version may change the public API;
 [`docs/CHANGELOG.md`](docs/CHANGELOG.md) lists every such change. The design is [`docs/spec.md`](docs/spec.md), and its §9 is the
 readiness test this release passes in CI.
@@ -143,13 +143,13 @@ built by string concatenation from caller input. It runs on the
 Add it to the `deps` in your `mix.exs`:
 
 ```elixir
-{:reminisce, "~> 0.5"}
+{:reminisce, "~> 0.6"}
 ```
 
 Or, from its git repository at a release tag:
 
 ```elixir
-{:reminisce, git: "https://github.com/NoeticEcho/reminisce-elixir.git", tag: "v0.5.6"}
+{:reminisce, git: "https://github.com/NoeticEcho/reminisce-elixir.git", tag: "v0.6.0"}
 ```
 
 Then run `mix deps.get`. The library needs a TypeDB server to talk to;
@@ -227,8 +227,8 @@ never an empty answer.
 | `purge/3` | deletes a fully withdrawn subject and its links. Needs `confirm: true` |
 | `as_of/4` | an owner's memories as believed at a moment |
 | `mark_recalled/3` | bumps the recall count and time |
-| `decay/2`, `consolidate/3` | the pure decay, and the host-run pass, which also expires intentions past their `valid_to` and erases affects about a person past the store's retention |
-| `backup/2`, `restore/2` | `schema.tql` plus `data.jsonl`. Restore goes into an empty database |
+| `decay/2`, `consolidate/3` | the pure decay, and the host-run pass, which also expires intentions past their `valid_to` and erases affects about a person past the store's retention. A store's `decay: [exempt_aspects: [...]]` keeps memories with those aspects out of every pass |
+| `backup/3`, `restore/2` | `schema.tql` plus `data.jsonl`. Restore goes into an empty database. `omit: [label]` leaves a host attribute out of both, such as a derived embedding |
 | `persona_set/3` | the keeper's act: writes a whole version of the agent's DNA and adopts it. See [The persona DNA](#the-persona-dna) |
 | `persona_propose/3`, `persona_adopt/4`, `persona_decline/4` | a pass's proposal of a version, and the keeper's adoption or refusal of it |
 | `persona_fork/4` | a child agent's version 1, copied from its parent's |
@@ -598,7 +598,8 @@ Store options include `:policy`, `:analyser`, `:aspects`, `:review_aspects`,
 
 A host may define its own attributes, its own subtypes of `memory` and its own
 relations, **in its own `define`, after `setup/1`**. `setup/1` checks only the
-library's types. `backup/2` exports every type in the database.
+library's types. `backup/3` exports every type in the database, except the
+host attributes its `omit:` names.
 
 A withdrawal deletes every attribute a host defined on `memory` unless the
 store's `:withdraw_keep` names it. Name identifiers there, such as a tenant id,

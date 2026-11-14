@@ -261,7 +261,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { os: macos-14, platform: macos-arm64, typedb: mac-arm64, typedb_sha256: 0e146d069473223d5d2523cdf0e889738f73cd2ae8d532bdf611d2f200ae6c9f }
+          - { os: macos-15, platform: macos-arm64, typedb: mac-arm64, typedb_sha256: 0e146d069473223d5d2523cdf0e889738f73cd2ae8d532bdf611d2f200ae6c9f }
           - { os: macos-15-intel, platform: macos-x86_64, typedb: mac-x86_64, typedb_sha256: ed0e49f69386514e0b5647c7292a6734cacef211b6c671c38842ff2a2fb16777 }
           - { os: ubuntu-24.04, platform: linux-x86_64 }
     runs-on: ${{ matrix.os }}

@@ -27,8 +27,10 @@ defmodule Reminisce.Store do
       key and its matching terms for each memory that matches the query;
       `consolidate` keeps a key and a number per memory; `as_of` returns every
       memory it finds.
-    * `:decay` — `[tau_days: %{aspect => days}, default_tau_days: n, floor: f]`
-      for `Reminisce.consolidate/3`.
+    * `:decay` — `[tau_days: %{aspect => days}, default_tau_days: n, floor: f,
+      inactive_below: f, exempt_aspects: [aspect]]` for
+      `Reminisce.consolidate/3`; see `Reminisce.Decay`. `:exempt_aspects` must
+      be aspects the store knows.
     * `:clock` — a zero-arity function returning the current `DateTime`.
       Default `DateTime.utc_now/0`. Tests fix it.
     * `:withdraw_batch` — memories redacted per transaction by
@@ -136,6 +138,7 @@ defmodule Reminisce.Store do
       do: raise(ArgumentError, ":page_size must be an integer from 1 to #{@max_page}")
 
     check_aspects!(store.aspects)
+    check_exempt!(store)
 
     %{
       store
@@ -270,6 +273,22 @@ defmodule Reminisce.Store do
 
   defp check_aspects!(other),
     do: raise(ArgumentError, ":aspects must be a non-empty list, got #{inspect(other)}")
+
+  # An exempt aspect the store does not know would exempt nothing, silently.
+  defp check_exempt!(%__MODULE__{decay: decay, aspects: aspects}) do
+    exempt = if Keyword.keyword?(decay), do: Keyword.get(decay, :exempt_aspects, []), else: []
+    known = [:affective | aspects]
+
+    unless is_list(exempt) and Enum.all?(exempt, &(&1 in known)),
+      do:
+        raise(
+          ArgumentError,
+          ":decay's :exempt_aspects must be a list of the store's aspects, " <>
+            "got #{inspect(exempt)}"
+        )
+
+    :ok
+  end
 
   # The words a memory brings, how something was felt, and a strand's kind and
   # name; a withdrawal never keeps them.

@@ -30,4 +30,21 @@ defmodule Reminisce.DecayTest do
     recalled = %{memory([:episodic]) | last_recalled_at: far}
     assert Reminisce.decay(recalled, at: far) == 0.5
   end
+
+  test "an exempt aspect never decays, whatever else the memory is" do
+    far = DateTime.add(@t0, 800, :day)
+    opts = [at: far, exempt_aspects: [:autobiographical]]
+    assert Reminisce.decay(memory([:autobiographical], 0.9), opts) == 0.9
+    assert Reminisce.decay(memory([:autobiographical, :episodic], 0.9), opts) == 0.9
+    assert Reminisce.decay(memory([:episodic], 0.9), opts) < 0.9
+  end
+
+  test "an exempt aspect the store does not know is refused" do
+    assert_raise ArgumentError, ~r/exempt_aspects/, fn ->
+      Reminisce.Store.new(TypeDB, "x", decay: [exempt_aspects: [:autobiografical]])
+    end
+
+    assert %Reminisce.Store{} =
+             Reminisce.Store.new(TypeDB, "x", decay: [exempt_aspects: [:autobiographical]])
+  end
 end
