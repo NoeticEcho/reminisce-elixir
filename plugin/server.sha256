@@ -12,3 +12,7 @@
 # (the pin commit), and a plugin installed from that commit checks against
 # them, independently of the release. The next release is not cut until it
 # has been made.
+54a1ccdd09d71e3884e94ba2f83519042c5aac43a6b70973790c90bf89db1a98  reminisce-mcp-0.6.0-linux-arm64.tar.gz
+8559a7c6359faef15e0f19efa9fff54771ba856ff33d750561ffe9fd4afd2c2e  reminisce-mcp-0.6.0-linux-x86_64.tar.gz
+39d69c75597623fa6377659e9dae8564dae1a963bf6ea1c9b92179ff85b4b8f0  reminisce-mcp-0.6.0-macos-arm64.tar.gz
+285a26e23e3fc8e44291de539299aba9bd57709e350519e862160d4a060f1848  reminisce-mcp-0.6.0-macos-x86_64.tar.gz
